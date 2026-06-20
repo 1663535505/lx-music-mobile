@@ -1,4 +1,5 @@
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
+const path = require('path')
+const { getDefaultConfig } = require('@react-native/metro-config')
 
 /**
  * Metro configuration
@@ -6,8 +7,21 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
  *
  * @type {import('metro-config').MetroConfig}
  */
-const config = {
+const defaultConfig = getDefaultConfig(__dirname)
+
+module.exports = {
+  ...defaultConfig,
   resolver: {
+    ...defaultConfig.resolver,
+    resolveRequest(context, moduleName, platform) {
+      if (moduleName.startsWith('@/')) {
+        const resolvedModuleName = path.resolve(__dirname, 'src', moduleName.slice(2))
+        return context.resolveRequest(context, resolvedModuleName, platform)
+      }
+      return defaultConfig.resolver.resolveRequest
+        ? defaultConfig.resolver.resolveRequest(context, moduleName, platform)
+        : context.resolveRequest(context, moduleName, platform)
+    },
     extraNodeModules: {
       // crypto: require.resolve('react-native-quick-crypto'),
       // stream: require.resolve('stream-browserify'),
@@ -15,5 +29,3 @@ const config = {
     },
   },
 }
-
-module.exports = mergeConfig(getDefaultConfig(__dirname), config)
