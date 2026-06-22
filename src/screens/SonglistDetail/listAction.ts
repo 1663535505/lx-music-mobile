@@ -1,5 +1,6 @@
 import { createList, setTempList } from '@/core/list'
 import { playList } from '@/core/player/player'
+import { downloadPlaylist } from '@/core/download'
 import { getListDetail, getListDetailAll } from '@/core/songlist'
 import { LIST_IDS } from '@/config/constant'
 import listState from '@/store/list/state'
@@ -55,4 +56,29 @@ export const handleCollect = async(id: string, source: Source, name: string) => 
     sourceListId: id,
   })
   toast(global.i18n.t('collect_success'))
+}
+
+export const handleDownloadAll = async(id: string, source: Source, list?: LX.Music.MusicInfoOnline[]) => {
+  if (!list?.length) list = (await getListDetail(id, source, 1)).list
+  if (!list?.length) {
+    toast('没有可下载的歌曲')
+    return
+  }
+
+  const confirm = await confirmDialog({
+    title: '歌单下载',
+    message: `共 ${list.length} 首歌曲，是否添加到下载队列？`,
+    confirmButtonText: global.i18n.t('confirm_button_text'),
+  })
+  if (!confirm) return
+
+  // set list to temp so downloadPlaylist can access it
+  const listId = getListId(id, source)
+  await setTempList(listId, [...list])
+  const count = await downloadPlaylist(LIST_IDS.TEMP)
+  if (count > 0) {
+    toast(`已添加 ${count} 首歌曲到下载队列`)
+  } else {
+    toast('所有歌曲已在下载队列中')
+  }
 }

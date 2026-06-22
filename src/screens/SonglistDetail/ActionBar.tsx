@@ -7,7 +7,7 @@ import { pop } from '@/navigation'
 import { useTheme } from '@/store/theme/hook'
 import commonState from '@/store/common/state'
 import Text from '@/components/common/Text'
-import { handleCollect, handlePlay } from './listAction'
+import { handleCollect, handleDownloadAll, handlePlay } from './listAction'
 import songlistState from '@/store/songlist/state'
 import { useI18n } from '@/lang'
 import { useListInfo } from './state'
@@ -32,6 +32,11 @@ export default memo(() => {
     void handleCollect(info.id, info.source, songlistState.listDetailInfo.info.name || info.name)
   }
 
+  const handleDownload = () => {
+    if (!songlistState.listDetailInfo.info.name) return
+    void handleDownloadAll(info.id, info.source, songlistState.listDetailInfo.list)
+  }
+
   return (
     <View style={styles.container}>
       <Button onPress={handleCollection} style={styles.controlBtn}>
@@ -39,6 +44,9 @@ export default memo(() => {
       </Button>
       <Button onPress={handlePlayAll} style={styles.controlBtn}>
         <Text style={{ ...styles.controlBtnText, color: theme['c-button-font'] }}>{t('play_all')}</Text>
+      </Button>
+      <Button onPress={handleDownload} style={styles.controlBtn}>
+        <Text style={{ ...styles.controlBtnText, color: theme['c-button-font'] }}>{t('setting_download_list')}</Text>
       </Button>
       <Button onPress={back} style={styles.controlBtn}>
         <Text style={{ ...styles.controlBtnText, color: theme['c-button-font'] }}>{t('back')}</Text>
@@ -57,7 +65,7 @@ const styles = createStyle({
   controlBtn: {
     flexGrow: 1,
     flexShrink: 1,
-    width: '33%',
+    width: '25%',
     paddingTop: 12,
     paddingBottom: 12,
     paddingLeft: 10,

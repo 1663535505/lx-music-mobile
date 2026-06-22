@@ -582,3 +582,74 @@ export const setUserApiAllowShowUpdateAlert = async(id: string, enable: boolean)
   targetApi.allowShowUpdateAlert = enable
   await saveData(userApiPrefix, userApis)
 }
+
+// ==================== Download Registry ====================
+export interface DownloadRegistryItem {
+  filePath: string
+  downloadedAt: number
+  quality: string
+}
+
+const downloadRegistryPrefix = storageDataPrefix.downloadRegistry
+let downloadRegistry: Map<string, DownloadRegistryItem> | null = null
+
+const initDownloadRegistry = async() => {
+  if (downloadRegistry) return
+  const data = await getData<Record<string, DownloadRegistryItem>>(downloadRegistryPrefix)
+  downloadRegistry = data ? new Map(Object.entries(data)) : new Map()
+}
+
+const saveDownloadRegistryThrottle = throttle(() => {
+  if (!downloadRegistry) return
+  const obj = Object.fromEntries(downloadRegistry)
+  void saveData(downloadRegistryPrefix, obj)
+}, 2000)
+
+export const isSongDownloaded = async(musicId: string, quality: string): Promise<DownloadRegistryItem | null> => {
+  await initDownloadRegistry()
+  const key = `${musicId}_${quality}`
+  const item = downloadRegistry!.get(key)
+  if (!item) return null
+  return item
+}
+
+export const setSongDownloaded = async(musicId: string, quality: string, filePath: string) => {
+  await initDownloadRegistry()
+  const key = `${musicId}_${quality}`
+  downloadRegistry!.set(key, { filePath, downloadedAt: Date.now(), quality })
+  saveDownloadRegistryThrottle()
+}
+
+export const removeSongDownloaded = async(musicId: string, quality: string) => {
+  await initDownloadRegistry()
+  const key = `${musicId}_${quality}`
+  downloadRegistry!.delete(key)
+  saveDownloadRegistryThrottle()
+}
+
+export const getDownloadRegistry = async(): Promise<Map<string, DownloadRegistryItem>> => {
+  await initDownloadRegistry()
+  return downloadRegistry!
+}
+
+// ==================== Download Queue Persistence ====================
+const downloadQueuePrefix = storageDataPrefix.downloadQueue
+
+export interface PersistedQueueItem {
+  id: string
+  musicInfo: LX.Music.MusicInfoOnline
+  status: 'waiting' | 'error'
+  error?: string
+}
+
+export const saveDownloadQueue = async(queue: PersistedQueueItem[]) => {
+  await saveData(downloadQueuePrefix, queue)
+}
+
+export const getDownloadQueue = async(): Promise<PersistedQueueItem[]> => {
+  return await getData<PersistedQueueItem[]>(downloadQueuePrefix) ?? []
+}
+
+export const clearDownloadQueueStorage = async() => {
+  await saveData(downloadQueuePrefix, [])
+}

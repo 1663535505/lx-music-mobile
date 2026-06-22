@@ -20,6 +20,7 @@ import {
   removeTempPlayList,
 } from '@/core/player/tempPlayList'
 import { getMusicUrl, getPicPath, getLyricInfo } from '@/core/music'
+import { submitPlayRequest, getLocalPath, isAutoSaveOnPlay } from '@/core/download'
 import { requestMsg } from '@/utils/message'
 import { getRandom } from '@/utils/common'
 import { filterList } from './utils'
@@ -137,7 +138,66 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
   if (!diffCurrentMusicInfo(musicInfo)) return
   if (cancelDelayRetry) cancelDelayRetry()
   global.lx.gettingUrlId = createGettingUrlId(musicInfo)
-  void getMusicPlayUrl(musicInfo, isRefresh).then((url) => {
+
+  // Download mode: check local → download → play from local
+  if (isAutoSaveOnPlay()) {
+    const onlineMusicInfo = ('progress' in musicInfo ? musicInfo.metadata.musicInfo : musicInfo) as LX.Music.MusicInfoOnline
+
+    if (onlineMusicInfo.source !== 'local') {
+      // Step 1: Check local registry
+      void getLocalPath(onlineMusicInfo).then(localPath => {
+        if (!diffCurrentMusicInfo(musicInfo)) return
+
+        if (localPath) {
+          // Found locally — play immediately, no network request
+          setResource(musicInfo, localPath, playerState.progress.nowPlayTime)
+          global.lx.gettingUrlId = ''
+          clearLoadTimeout()
+          return
+        }
+
+        // Step 2: Not local — get URL then submit to download scheduler
+        void getMusicPlayUrl(musicInfo, isRefresh).then(url => {
+          if (!url || !diffCurrentMusicInfo(musicInfo)) return
+
+          // Submit to scheduler: download first, then play
+          void submitPlayRequest(
+            onlineMusicInfo,
+            (localPath) => {
+              // Download complete — play from local file
+              if (diffCurrentMusicInfo(musicInfo)) {
+                setResource(musicInfo, localPath, playerState.progress.nowPlayTime)
+              }
+              if (musicInfo === playerState.playMusicInfo.musicInfo) {
+                global.lx.gettingUrlId = ''
+                clearLoadTimeout()
+              }
+            },
+            () => {
+              // Download failed — fall back to streaming from URL
+              if (diffCurrentMusicInfo(musicInfo)) {
+                setResource(musicInfo, url, playerState.progress.nowPlayTime)
+              }
+              if (musicInfo === playerState.playMusicInfo.musicInfo) {
+                global.lx.gettingUrlId = ''
+                clearLoadTimeout()
+              }
+            },
+            url, // pass URL to avoid double fetch
+          )
+        }).catch((err: any) => {
+          console.log(err)
+          setStatusText(err.message as string)
+          global.app_event.error()
+          addDelayNextTimeout()
+        })
+      })
+      return
+    }
+  }
+
+  // Original behavior: play from URL directly
+  void getMusicPlayUrl(musicInfo, isRefresh).then(async(url) => {
     if (!url) return
     setResource(musicInfo, url, playerState.progress.nowPlayTime)
   }).catch((err: any) => {

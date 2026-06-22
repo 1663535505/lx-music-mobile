@@ -352,6 +352,31 @@ declare global {
       'download.fileName': '歌名 - 歌手' | '歌手 - 歌名' | '歌名'
 
       /**
+       * 播放时是否自动保存歌曲到本地
+       */
+      'download.isAutoSaveOnPlay': boolean
+
+      /**
+       * 进入歌单详情页时是否自动下载歌单内所有歌曲
+       */
+      'download.isAutoDownloadList': boolean
+
+      /**
+       * 歌曲保存路径
+       */
+      'download.savePath': string
+
+      /**
+       * 下载音质（独立于播放音质）
+       */
+      'download.quality': LX.Quality | ''
+
+      /**
+       * 仅在WiFi环境下下载
+       */
+      'download.wifiOnly': boolean
+
+      /**
        * 是否启用同步
        */
       'sync.enable': boolean
