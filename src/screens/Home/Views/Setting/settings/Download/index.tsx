@@ -16,6 +16,8 @@ export default memo(() => {
   const isAutoSaveOnPlay = useSettingValue('download.isAutoSaveOnPlay')
   const isAutoDownloadList = useSettingValue('download.isAutoDownloadList')
   const wifiOnly = useSettingValue('download.wifiOnly')
+  const isWriteTag = useSettingValue('download.isWriteTag')
+  const maxRetries = useSettingValue('download.maxRetries')
   const savePath = useSettingValue('download.savePath')
   const downloadQuality = useSettingValue('download.quality')
   const [selecting, setSelecting] = useState(false)
@@ -85,6 +87,28 @@ export default memo(() => {
         onChange={(val) => { updateSetting({ 'download.wifiOnly': val }) }}
         label={t('setting_download_wifi_only')}
       />
+      <CheckBoxItem
+        check={isWriteTag}
+        onChange={(val) => { updateSetting({ 'download.isWriteTag': val }) }}
+        label={t('setting_download_write_tag')}
+        helpDesc={t('setting_download_write_tag_tip')}
+      />
+      <View style={styles.qualitySection}>
+        <Text style={styles.pathLabel}>{t('download_setting_max_retries')}</Text>
+        <Text style={styles.helpText}>{t('download_setting_max_retries_tip')}</Text>
+        <View style={styles.qualityList}>
+          {[0, 1, 2, 3, 5].map((n) => (
+            <CheckBox
+              marginRight={8}
+              check={maxRetries === n}
+              label={String(n)}
+              onChange={() => { updateSetting({ 'download.maxRetries': n }) }}
+              key={n}
+              need
+            />
+          ))}
+        </View>
+      </View>
       <View style={styles.qualitySection}>
         <Text style={styles.pathLabel}>{t('setting_download_quality')}</Text>
         <View style={styles.qualityList}>
@@ -131,5 +155,10 @@ const styles = createStyle({
   qualityList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  helpText: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 6,
   },
 })

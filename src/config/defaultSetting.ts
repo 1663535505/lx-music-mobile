@@ -74,6 +74,12 @@ const defaultSetting: LX.AppSetting = {
   'download.savePath': '',
   'download.quality': '',
   'download.wifiOnly': false,
+  'download.isWriteTag': false,
+  'download.maxRetries': 3,
+
+  'player.lyricOffset': 0,
+  'player.timeoutExitSongCount': 0,
+  'player.timeoutExitFadeOut': false,
 
   'sync.enable': false,
 

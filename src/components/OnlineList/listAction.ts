@@ -1,7 +1,8 @@
 import { LIST_IDS } from '@/config/constant'
-import { addListMusics } from '@/core/list'
+import { addListMusics, setTempList } from '@/core/list'
 import { playList, playNext } from '@/core/player/player'
 import { addTempPlayList } from '@/core/player/tempPlayList'
+import { downloadPlaylist } from '@/core/download'
 import settingState from '@/store/setting/state'
 import { getListMusicSync } from '@/utils/listManage'
 import { confirmDialog, openUrl, shareMusic, toast } from '@/utils/tools'
@@ -50,6 +51,21 @@ export const handleDislikeMusic = async(musicInfo: LX.Music.MusicInfoOnline) => 
   toast(global.i18n.t('lists_dislike_music_add_tip'))
   if (hasDislike(playerState.playMusicInfo.musicInfo)) {
     void playNext(true)
+  }
+}
+
+export const handleDownloadSelected = async(selectedList: LX.Music.MusicInfoOnline[]) => {
+  if (!selectedList.length) {
+    toast(global.i18n.t('list_download_selected_empty'))
+    return
+  }
+  const tempId = `__download_temp_${Date.now()}`
+  await setTempList(tempId, [...selectedList])
+  const count = await downloadPlaylist(tempId)
+  if (count > 0) {
+    toast(global.i18n.t('list_download_selected_tip', { count: String(count) }))
+  } else {
+    toast(global.i18n.t('list_download_selected_empty'))
   }
 }
 

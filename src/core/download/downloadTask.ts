@@ -3,6 +3,7 @@ import { formatMusicName } from '@/utils/tools'
 import { getRandom } from '@/utils/common'
 import settingState from '@/store/setting/state'
 import type { DownloadTaskResult } from './types'
+import { writeTagsToFile } from './tagWriter'
 
 const getExtFromQuality = (quality: LX.Quality): string => {
   switch (quality) {
@@ -86,6 +87,20 @@ export const downloadSingleSong = (
         }
         const RNFS = require('react-native-fs')
         await RNFS.moveFile(tempPath, filePath)
+
+        // Write metadata tags if enabled
+        if (settingState.setting['download.isWriteTag']) {
+          try {
+            await writeTagsToFile(filePath, {
+              name: musicInfo.name,
+              singer: musicInfo.singer,
+              albumName: musicInfo.meta.albumName || '',
+              picUrl: musicInfo.meta.picUrl,
+            })
+          } catch {
+            // Tag writing failure is non-fatal
+          }
+        }
 
         resolve({ success: true, filePath })
       } catch (err: any) {

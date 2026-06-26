@@ -3,6 +3,7 @@ import {
   setLyric as lrcSetLyric,
   pause as lrcPause,
   setPlaybackRate as lrcSetPlaybackRate,
+  setOffset as lrcSetOffset,
   toggleTranslation as lrcToggleTranslation,
   toggleRoma as lrcToggleRoma,
   init as lrcInit,
@@ -119,5 +120,14 @@ export const setLyric = async() => {
     await handleSetLyric(playerState.musicInfo.lrc, tlrc, rlrc)
   }
 
+  if (playerState.isPlay) play()
+}
+
+/**
+ * set lyric offset
+ * @param offset offset in ms (positive = delay, negative = advance)
+ */
+export const setLyricOffset = (offset: number) => {
+  lrcSetOffset(offset)
   if (playerState.isPlay) play()
 }

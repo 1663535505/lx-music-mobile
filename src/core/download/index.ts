@@ -13,6 +13,7 @@ import {
   getState,
   getSchedulerStatus,
   removeBatchItem,
+  retryAllFailed,
 } from './saveScheduler'
 import { buildFilePath } from './downloadTask'
 import type { SchedulerState } from './saveScheduler'
@@ -51,7 +52,7 @@ export const downloadPlaylist = async(listId: string): Promise<number> => {
 
 export const getDownloadStatus = (): SchedulerState => getState()
 export { stopBatchQueue as stopDownload, clearAllQueues as clearDownload }
-export { removeBatchItem as removeDownloadItem }
+export { removeBatchItem as removeDownloadItem, retryAllFailed }
 
 /**
  * Check if auto-download features are enabled and configured.

@@ -1,14 +1,20 @@
 import { memo, useCallback, useEffect, useState, useMemo } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
+import Text from '@/components/common/Text'
 import { useI18n } from '@/lang'
-import { getDownloadStatus, stopDownload, clearDownload, type DownloadQueueState } from '@/core/download'
-import { getDownloadRegistry, removeSongDownloaded, type DownloadRegistryItem } from '@/utils/data'
+import { getDownloadStatus, stopDownload, clearDownload, retryAllFailed, type DownloadQueueState } from '@/core/download'
+import { getDownloadRegistry, removeSongDownloaded, getDownloadRegistryStats, type DownloadRegistryItem } from '@/utils/data'
 import { createStyle } from '@/utils/tools'
+import { sizeFormate } from '@/utils/common'
 import { useTheme } from '@/store/theme/hook'
+import { LIST_ITEM_HEIGHT } from '@/config/constant'
+import { scaleSizeH } from '@/utils/pixelRatio'
 
 type Tab = 'queue' | 'downloaded'
 
 type QueueItem = DownloadQueueState['batchQueue'][0]
+
+const ITEM_HEIGHT = scaleSizeH(LIST_ITEM_HEIGHT)
 
 export default memo(() => {
   const t = useI18n()
@@ -16,6 +22,7 @@ export default memo(() => {
   const [tab, setTab] = useState<Tab>('queue')
   const [state, setState] = useState<DownloadQueueState>(getDownloadStatus)
   const [downloaded, setDownloaded] = useState<Map<string, DownloadRegistryItem>>(new Map())
+  const [stats, setStats] = useState<{ totalCount: number; totalSize: number }>({ totalCount: 0, totalSize: 0 })
 
   useEffect(() => {
     const handler = (data: DownloadQueueState) => {
@@ -30,6 +37,8 @@ export default memo(() => {
   const loadRegistry = useCallback(async() => {
     const registry = await getDownloadRegistry()
     setDownloaded(new Map(registry))
+    const s = await getDownloadRegistryStats()
+    setStats(s)
   }, [])
 
   useEffect(() => {
@@ -42,6 +51,10 @@ export default memo(() => {
 
   const handleClear = useCallback(() => {
     clearDownload()
+  }, [])
+
+  const handleRetryAll = useCallback(() => {
+    retryAllFailed()
   }, [])
 
   const handleRemoveDownloaded = useCallback(async(musicId: string, quality: string) => {
@@ -62,11 +75,17 @@ export default memo(() => {
     allItems.filter(q => q.status === 'completed' || q.status === 'skipped').length,
   [allItems])
 
+  const hasFailed = useMemo(() =>
+    allItems.some(q => q.status === 'error'),
+  [allItems])
+
   const isRunning = state.currentDownloading !== null
 
   const getStatusText = (item: QueueItem) => {
     switch (item.status) {
-      case 'waiting': return '等待中'
+      case 'waiting':
+        if (item.retryCount > 0) return `等待重试 (${item.retryCount})`
+        return '等待中'
       case 'downloading': return `${item.progress}%`
       case 'completed': return '完成'
       case 'skipped': return '已存在'
@@ -92,8 +111,14 @@ export default memo(() => {
     return ''
   }
 
-  const renderQueueItem = ({ item }: { item: QueueItem }) => (
-    <View style={styles.item}>
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: ITEM_HEIGHT,
+    offset: ITEM_HEIGHT * index,
+    index,
+  }), [])
+
+  const renderQueueItem = useCallback(({ item }: { item: QueueItem }) => (
+    <View style={[styles.item, { borderBottomColor: theme['c-border-background'] }]}>
       <View style={styles.itemInfo}>
         <Text style={[styles.songName, { color: theme['c-font'] }]} numberOfLines={1}>
           {getQueueLabel(item)}{item.musicInfo.name}
@@ -106,15 +131,15 @@ export default memo(() => {
         {getStatusText(item)}
       </Text>
     </View>
-  )
+  ), [theme])
 
-  const renderDownloadedItem = ({ item }: { item: [string, DownloadRegistryItem] }) => {
+  const renderDownloadedItem = useCallback(({ item }: { item: [string, DownloadRegistryItem] }) => {
     const [key, entry] = item
     const parts = key.split('_')
     const quality = entry.quality
     const fileName = entry.filePath.split('/').pop() || ''
     return (
-      <View style={styles.item}>
+      <View style={[styles.item, { borderBottomColor: theme['c-border-background'] }]}>
         <View style={styles.itemInfo}>
           <Text style={[styles.songName, { color: theme['c-font'] }]} numberOfLines={1}>
             {fileName}
@@ -128,15 +153,15 @@ export default memo(() => {
         </TouchableOpacity>
       </View>
     )
-  }
+  }, [theme, handleRemoveDownloaded])
 
   const downloadedEntries = Array.from(downloaded.entries())
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabs}>
+      <View style={[styles.tabs, { borderBottomColor: theme['c-border-background'] }]}>
         <TouchableOpacity
-          style={[styles.tab, tab === 'queue' && styles.tabActive]}
+          style={[styles.tab, tab === 'queue' && { borderBottomColor: theme['c-primary-font'] }]}
           onPress={() => setTab('queue')}
         >
           <Text style={[styles.tabText, { color: tab === 'queue' ? theme['c-primary-font'] : theme['c-font-label'] }]}>
@@ -144,7 +169,7 @@ export default memo(() => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === 'downloaded' && styles.tabActive]}
+          style={[styles.tab, tab === 'downloaded' && { borderBottomColor: theme['c-primary-font'] }]}
           onPress={() => setTab('downloaded')}
         >
           <Text style={[styles.tabText, { color: tab === 'downloaded' ? theme['c-primary-font'] : theme['c-font-label'] }]}>
@@ -160,6 +185,11 @@ export default memo(() => {
               {totalCompleted}/{allItems.length}
             </Text>
             <View style={styles.buttons}>
+              {hasFailed && !isRunning && (
+                <TouchableOpacity style={styles.button} onPress={handleRetryAll}>
+                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>重试失败</Text>
+                </TouchableOpacity>
+              )}
               {isRunning && (
                 <TouchableOpacity style={styles.button} onPress={handleStop}>
                   <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>停止</Text>
@@ -181,12 +211,20 @@ export default memo(() => {
               data={allItems}
               renderItem={renderQueueItem}
               keyExtractor={item => item.id}
+              getItemLayout={getItemLayout}
               style={styles.list}
             />
           )}
         </>
       ) : (
         <>
+          {stats.totalCount > 0 && (
+            <View style={styles.storageInfo}>
+              <Text style={[styles.storageText, { color: theme['c-font-label'] }]}>
+                已占用: {sizeFormate(stats.totalSize)} | {stats.totalCount} 首
+              </Text>
+            </View>
+          )}
           {downloadedEntries.length === 0 ? (
             <View style={styles.empty}>
               <Text style={[styles.emptyText, { color: theme['c-font-label'] }]}>暂无已下载歌曲</Text>
@@ -196,6 +234,7 @@ export default memo(() => {
               data={downloadedEntries}
               renderItem={renderDownloadedItem}
               keyExtractor={item => item[0]}
+              getItemLayout={getItemLayout}
               style={styles.list}
             />
           )}
@@ -212,16 +251,13 @@ const styles = createStyle({
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-  },
-  tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#4caf50',
+    borderBottomColor: 'transparent',
   },
   tabText: {
     fontSize: 14,
@@ -257,9 +293,8 @@ const styles = createStyle({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    height: ITEM_HEIGHT,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
   },
   itemInfo: {
     flex: 1,
@@ -284,5 +319,12 @@ const styles = createStyle({
   },
   emptyText: {
     fontSize: 14,
+  },
+  storageInfo: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  storageText: {
+    fontSize: 12,
   },
 })

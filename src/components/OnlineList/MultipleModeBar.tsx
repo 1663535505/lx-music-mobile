@@ -16,6 +16,7 @@ export interface MultipleModeBarProps {
   onSwitchMode: (mode: SelectMode) => void
   onSelectAll: (isAll: boolean) => void
   onExitSelectMode: () => void
+  onDownloadSelected?: () => void
 }
 export interface MultipleModeBarType {
   show: () => void
@@ -24,7 +25,7 @@ export interface MultipleModeBarType {
   exitSelectMode: () => void
 }
 
-export default forwardRef<MultipleModeBarType, MultipleModeBarProps>(({ onSelectAll, onSwitchMode, onExitSelectMode }, ref) => {
+export default forwardRef<MultipleModeBarType, MultipleModeBarProps>(({ onSelectAll, onSwitchMode, onExitSelectMode, onDownloadSelected }, ref) => {
   // const isGetDetailFailedRef = useRef(false)
   const [visible, setVisible] = useState(false)
   const [animatePlayed, setAnimatPlayed] = useState(true)
@@ -125,6 +126,11 @@ export default forwardRef<MultipleModeBarType, MultipleModeBarProps>(({ onSelect
         <TouchableOpacity onPress={handleSelectAll} style={styles.btn}>
           <Text color={theme['c-button-font']}>{global.i18n.t(isSelectAll ? 'list_select_unall' : 'list_select_all')}</Text>
         </TouchableOpacity>
+        {onDownloadSelected && (
+          <TouchableOpacity onPress={onDownloadSelected} style={styles.btn}>
+            <Text color={theme['c-primary-font']}>{global.i18n.t('list_download_selected')}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={onExitSelectMode} style={styles.btn}>
           <Text color={theme['c-button-font']}>{global.i18n.t('list_select_cancel')}</Text>
         </TouchableOpacity>

@@ -4,6 +4,8 @@ import SongList from '../Views/SongList'
 import Mylist from '../Views/Mylist'
 import Leaderboard from '../Views/Leaderboard'
 import Download from '../Views/Download'
+import PlayHistory from '../Views/PlayHistory'
+import ListeningStats from '../Views/ListeningStats'
 import Setting from '../Views/Setting'
 import commonState, { type InitState as CommonState } from '@/store/common/state'
 
@@ -29,6 +31,8 @@ const Main = () => {
       case 'nav_top': return <Leaderboard />
       case 'nav_love': return <Mylist />
       case 'nav_download': return <Download />
+      case 'nav_history': return <PlayHistory />
+      case 'nav_stats': return <ListeningStats />
       case 'nav_setting': return <Setting />
       case 'nav_search':
       default: return <Search />

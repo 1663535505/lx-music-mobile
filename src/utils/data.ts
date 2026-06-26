@@ -632,6 +632,36 @@ export const getDownloadRegistry = async(): Promise<Map<string, DownloadRegistry
   return downloadRegistry!
 }
 
+export const saveDownloadRegistry = async(registry: Map<string, DownloadRegistryItem>) => {
+  downloadRegistry = registry
+  const obj = Object.fromEntries(registry)
+  await saveData(downloadRegistryPrefix, obj)
+}
+
+export const removeSongDownloadedBulk = async(entries: Array<{ musicId: string; quality: string }>) => {
+  await initDownloadRegistry()
+  for (const { musicId, quality } of entries) {
+    const key = `${musicId}_${quality}`
+    downloadRegistry!.delete(key)
+  }
+  saveDownloadRegistryThrottle()
+}
+
+export const getDownloadRegistryStats = async(): Promise<{ totalCount: number; totalSize: number }> => {
+  await initDownloadRegistry()
+  const { stat } = await import('@/utils/fs')
+  let totalSize = 0
+  for (const [, entry] of downloadRegistry!) {
+    try {
+      const fileStat = await stat(entry.filePath)
+      totalSize += fileStat.size ?? 0
+    } catch {
+      // File may have been deleted
+    }
+  }
+  return { totalCount: downloadRegistry!.size, totalSize }
+}
+
 // ==================== Download Queue Persistence ====================
 const downloadQueuePrefix = storageDataPrefix.downloadQueue
 
@@ -652,4 +682,19 @@ export const getDownloadQueue = async(): Promise<PersistedQueueItem[]> => {
 
 export const clearDownloadQueueStorage = async() => {
   await saveData(downloadQueuePrefix, [])
+}
+
+// ==================== Play History ====================
+const playHistoryPrefix = storageDataPrefix.playHistory
+
+export const getPlayHistory = async(): Promise<LX.Player.PlayHistoryEntry[]> => {
+  return await getData<LX.Player.PlayHistoryEntry[]>(playHistoryPrefix) ?? []
+}
+
+const savePlayHistoryThrottle = throttle((entries: LX.Player.PlayHistoryEntry[]) => {
+  void saveData(playHistoryPrefix, entries)
+}, 2000)
+
+export const savePlayHistory = (entries: LX.Player.PlayHistoryEntry[]) => {
+  savePlayHistoryThrottle(entries)
 }

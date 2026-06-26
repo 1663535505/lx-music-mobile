@@ -76,6 +76,10 @@ export class StateEvent extends Event {
     this.emit('playTempPlayListChanged', tempPlayList)
   }
 
+  playHistoryChanged(entries: LX.Player.PlayHistoryEntry[]) {
+    this.emit('playHistoryChanged', entries)
+  }
+
   /**
    * 我的列表更新
    */

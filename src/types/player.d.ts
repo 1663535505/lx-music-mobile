@@ -75,6 +75,14 @@ declare global {
         index: number
       }
 
+      interface PlayHistoryEntry {
+        musicId: string
+        musicInfo: PlayMusic
+        listId: string | null
+        playedAt: number
+        playCount: number
+      }
+
       interface Track extends RNTrack {
         musicId: string
         // original: PlayMusic

@@ -1,5 +1,6 @@
 import { arrPush, arrUnshift, formatPlayTime2 } from '@/utils'
 import state from './state'
+import { addPlayHistory } from '@/core/playHistory'
 
 type PlayerMusicInfoKeys = keyof LX.Player.MusicInfo
 const musicInfoKeys: PlayerMusicInfoKeys[] = Object.keys(state.musicInfo) as PlayerMusicInfoKeys[]
@@ -69,6 +70,9 @@ export default {
     state.playedList.push(info)
 
     global.state_event.playPlayedListChanged({ ...state.playedList })
+
+    // Record play history
+    addPlayHistory(info.musicInfo, info.listId)
   },
   removePlayedList(index: number) {
     state.playedList.splice(index, 1)

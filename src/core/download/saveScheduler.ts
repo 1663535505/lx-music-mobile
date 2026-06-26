@@ -8,6 +8,7 @@ import { setStatusText } from '@/core/player/playStatus'
 import { toast } from '@/utils/tools'
 import { downloadSingleSong, buildFilePath, buildTempPath, type CancelDownloadFn } from './downloadTask'
 import type { DownloadTaskResult } from './types'
+import { shouldRetry, getRetryDelay, getRetryConfig } from './retryPolicy'
 
 // ==================== Types ====================
 export interface SchedulerTask {
@@ -19,6 +20,7 @@ export interface SchedulerTask {
   downloaded: number
   total: number
   error?: string
+  retryCount: number
 }
 
 export interface SchedulerState {
@@ -81,6 +83,7 @@ const restoreQueues = async() => {
       downloaded: 0,
       total: 0,
       error: item.error,
+      retryCount: 0,
     }
     // restore to batch queue (generic restore)
     batchQueue.push(task)
@@ -160,6 +163,7 @@ export const submitPlayRequest = async(
     progress: 0,
     downloaded: 0,
     total: 0,
+    retryCount: 0,
   }
   playTask = task
   status = 'downloading_play'
@@ -246,13 +250,29 @@ const processPlayDownload = async(
     // After play starts, schedule pending queue processing
     schedulePendingCheck()
   } else {
-    task.status = 'error'
     task.error = result.error || 'Download failed'
-    setStatusText(task.error)
-    onError(task.error)
-    notifyUpdate()
-    persistQueues()
-    schedulePendingCheck()
+
+    // Check if we should retry
+    if (shouldRetry(task.retryCount)) {
+      task.retryCount++
+      task.status = 'waiting'
+      const delay = getRetryDelay(task.retryCount - 1)
+      setStatusText(`下载失败，${Math.round(delay / 1000)}秒后重试 (${task.retryCount}/${getRetryConfig().maxRetries})...`)
+      notifyUpdate()
+      persistQueues()
+      setTimeout(() => {
+        if (playTask && playTask.id === task.id && playTask.status === 'waiting') {
+          void processPlayDownload(savePath, onComplete, onError)
+        }
+      }, delay)
+    } else {
+      task.status = 'error'
+      setStatusText(task.error)
+      onError(task.error)
+      notifyUpdate()
+      persistQueues()
+      schedulePendingCheck()
+    }
   }
 }
 
@@ -385,8 +405,25 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
     task.progress = 100
     await setSongDownloaded(musicInfo.id, quality, result.filePath)
   } else if (task.status !== 'cancelled') {
-    task.status = 'error'
     task.error = result.error || 'Download failed'
+
+    // Check if we should retry
+    if (shouldRetry(task.retryCount)) {
+      task.retryCount++
+      task.status = 'waiting'
+      const delay = getRetryDelay(task.retryCount - 1)
+      notifyUpdate()
+      persistQueues()
+      // Schedule retry after delay
+      setTimeout(() => {
+        if (status !== 'downloading_play' && task.status === 'waiting') {
+          void processBackgroundDownload(task, savePath, source)
+        }
+      }, delay)
+      return
+    } else {
+      task.status = 'error'
+    }
   }
 
   notifyUpdate()
@@ -420,6 +457,7 @@ export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[]): Pr
       progress: 0,
       downloaded: 0,
       total: 0,
+      retryCount: 0,
     })
     added++
   }
@@ -464,4 +502,27 @@ export const removeBatchItem = (id: string) => {
   removeBatch(id)
   notifyUpdate()
   persistQueues()
+}
+
+export const retryAllFailed = () => {
+  let hasRetry = false
+  for (const task of pendingQueue) {
+    if (task.status === 'error') {
+      task.status = 'waiting'
+      task.retryCount = 0
+      hasRetry = true
+    }
+  }
+  for (const task of batchQueue) {
+    if (task.status === 'error') {
+      task.status = 'waiting'
+      task.retryCount = 0
+      hasRetry = true
+    }
+  }
+  if (hasRetry) {
+    notifyUpdate()
+    persistQueues()
+    if (status === 'idle') void processNextBackgroundTask()
+  }
 }

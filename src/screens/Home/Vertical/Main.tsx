@@ -5,6 +5,8 @@ import SongList from '../Views/SongList'
 import Mylist from '../Views/Mylist'
 import Leaderboard from '../Views/Leaderboard'
 import Download from '../Views/Download'
+import PlayHistory from '../Views/PlayHistory'
+import ListeningStats from '../Views/ListeningStats'
 import Setting from '../Views/Setting'
 import commonState, { type InitState as CommonState } from '@/store/common/state'
 import { createStyle } from '@/utils/tools'
@@ -189,6 +191,36 @@ const DownloadPage = () => {
 
   return visible ? component : null
 }
+const HistoryPage = () => {
+  const [visible, setVisible] = useState(commonState.navActiveId == 'nav_history')
+  const component = useMemo(() => <PlayHistory />, [])
+  useEffect(() => {
+    let currentId: CommonState['navActiveId'] = commonState.navActiveId
+    const handleNavIdUpdate = (id: CommonState['navActiveId']) => {
+      currentId = id
+      if (id == 'nav_history') {
+        requestAnimationFrame(() => {
+          setVisible(true)
+        })
+      }
+    }
+    const handleHide = () => {
+      if (currentId != 'nav_setting') return
+      setVisible(false)
+    }
+    global.state_event.on('navActiveIdUpdated', handleNavIdUpdate)
+    global.state_event.on('themeUpdated', handleHide)
+    global.state_event.on('languageChanged', handleHide)
+
+    return () => {
+      global.state_event.off('navActiveIdUpdated', handleNavIdUpdate)
+      global.state_event.off('themeUpdated', handleHide)
+      global.state_event.off('languageChanged', handleHide)
+    }
+  }, [])
+
+  return visible ? component : null
+}
 const SettingPage = () => {
   const [visible, setVisible] = useState(commonState.navActiveId == 'nav_setting')
   const component = useMemo(() => <Setting />, [])
@@ -208,6 +240,36 @@ const SettingPage = () => {
   }, [])
   return visible ? component : null
 }
+const StatsPage = () => {
+  const [visible, setVisible] = useState(commonState.navActiveId == 'nav_stats')
+  const component = useMemo(() => <ListeningStats />, [])
+  useEffect(() => {
+    let currentId: CommonState['navActiveId'] = commonState.navActiveId
+    const handleNavIdUpdate = (id: CommonState['navActiveId']) => {
+      currentId = id
+      if (id == 'nav_stats') {
+        requestAnimationFrame(() => {
+          setVisible(true)
+        })
+      }
+    }
+    const handleHide = () => {
+      if (currentId != 'nav_setting') return
+      setVisible(false)
+    }
+    global.state_event.on('navActiveIdUpdated', handleNavIdUpdate)
+    global.state_event.on('themeUpdated', handleHide)
+    global.state_event.on('languageChanged', handleHide)
+
+    return () => {
+      global.state_event.off('navActiveIdUpdated', handleNavIdUpdate)
+      global.state_event.off('themeUpdated', handleHide)
+      global.state_event.off('languageChanged', handleHide)
+    }
+  }, [])
+
+  return visible ? component : null
+}
 
 const viewMap = {
   nav_search: 0,
@@ -215,7 +277,9 @@ const viewMap = {
   nav_top: 2,
   nav_love: 3,
   nav_download: 4,
-  nav_setting: 5,
+  nav_history: 5,
+  nav_stats: 6,
+  nav_setting: 7,
 }
 const indexMap = [
   'nav_search',
@@ -223,6 +287,8 @@ const indexMap = [
   'nav_top',
   'nav_love',
   'nav_download',
+  'nav_history',
+  'nav_stats',
   'nav_setting',
 ] as const
 
@@ -321,6 +387,12 @@ const Main = () => {
       </View>
       <View collapsable={false} key="nav_download" style={styles.pageStyle}>
         <DownloadPage />
+      </View>
+      <View collapsable={false} key="nav_history" style={styles.pageStyle}>
+        <HistoryPage />
+      </View>
+      <View collapsable={false} key="nav_stats" style={styles.pageStyle}>
+        <StatsPage />
       </View>
       <View collapsable={false} key="nav_setting" style={styles.pageStyle}>
         <SettingPage />

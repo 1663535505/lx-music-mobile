@@ -377,6 +377,31 @@ declare global {
       'download.wifiOnly': boolean
 
       /**
+       * 下载时是否写入歌曲信息标签（ID3/Vorbis）
+       */
+      'download.isWriteTag': boolean
+
+      /**
+       * 下载失败自动重试次数
+       */
+      'download.maxRetries': number
+
+      /**
+       * 歌词偏移量（毫秒），正数延迟，负数提前
+       */
+      'player.lyricOffset': number
+
+      /**
+       * 定时暂停播放-歌曲数量模式（0表示禁用）
+       */
+      'player.timeoutExitSongCount': number
+
+      /**
+       * 定时暂停播放-淡出音量
+       */
+      'player.timeoutExitFadeOut': boolean
+
+      /**
        * 是否启用同步
        */
       'sync.enable': boolean

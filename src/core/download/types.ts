@@ -25,3 +25,16 @@ export interface DownloadQueueState {
   totalSkipped: number
   totalError: number
 }
+
+export interface DownloadedFileInfo {
+  id: string
+  musicName: string
+  singer: string
+  quality: string
+  filePath: string
+  fileSize: number
+  downloadedAt: number
+}
+
+export type DownloadSortField = 'date' | 'name' | 'quality'
+export type DownloadSortOrder = 'asc' | 'desc'

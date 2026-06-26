@@ -77,6 +77,9 @@ export const setLyric = (lyric: string, translation?: string, romalrc?: string) 
 export const setPlaybackRate = (playbackRate: number) => {
   lrcTools.lrc!.setPlaybackRate(playbackRate)
 }
+export const setOffset = (offset: number) => {
+  lrcTools.lrc!.setOffset(offset)
+}
 export const toggleTranslation = (isShow: boolean) => {
   lrcTools.isShowTranslation = isShow
   if (!lrcTools.lyricText) return

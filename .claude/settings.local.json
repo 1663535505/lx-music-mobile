@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(xargs grep *)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(java -version)",
+      "Bash(wmic memorychip *)",
+      "Bash(wmic diskdrive *)",
+      "Bash(systeminfo)",
+      "Bash(wmic os *)"
     ]
   }
 }

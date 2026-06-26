@@ -3,8 +3,10 @@ import BackgroundTimer from 'react-native-background-timer'
 import { exitApp } from '@/core/common'
 import playerState from '@/store/player/state'
 import settingState from '@/store/setting/state'
+import { setVolume } from '@/plugins/player'
 
 type Hook = (time: number, isPlayedStop: boolean) => void
+type SongCountHook = (remaining: number) => void
 
 const timeoutTools = {
   bgTimeout: null as number | null,
@@ -96,4 +98,89 @@ export const onTimeUpdate = (handler: Hook) => {
 export const cancelTimeoutExit = () => {
   global.lx.isPlayedStop = false
   timeoutTools.callHooks()
+}
+
+// ==================== Song Count Mode ====================
+const songCountTools = {
+  remaining: -1,
+  songCountHooks: [] as SongCountHook[],
+  fadeOutInterval: null as NodeJS.Timer | null,
+
+  callHooks() {
+    for (const hook of this.songCountHooks) hook(this.remaining)
+  },
+  start(count: number) {
+    this.clear()
+    this.remaining = count
+    this.callHooks()
+  },
+  clear() {
+    this.remaining = -1
+    this.stopFadeOut()
+    this.callHooks()
+  },
+  onSongEnd() {
+    if (this.remaining < 0) return
+    this.remaining--
+    this.callHooks()
+    if (this.remaining <= 0) {
+      if (settingState.setting['player.timeoutExitFadeOut']) {
+        this.fadeOutAndExit()
+      } else {
+        this.clear()
+        exitApp('Song Count Exit')
+      }
+    }
+  },
+  fadeOutAndExit() {
+    const originalVolume = settingState.setting['player.volume']
+    const steps = 10
+    const stepTime = 300
+    let step = 0
+    this.fadeOutInterval = setInterval(() => {
+      step++
+      const vol = Math.max(0, originalVolume * (1 - step / steps))
+      void setVolume(vol)
+      if (step >= steps) {
+        this.stopFadeOut()
+        void setVolume(originalVolume)
+        this.clear()
+        exitApp('Song Count Fade Exit')
+      }
+    }, stepTime)
+  },
+  stopFadeOut() {
+    if (this.fadeOutInterval) {
+      clearInterval(this.fadeOutInterval)
+      this.fadeOutInterval = null
+    }
+  },
+  addHook(hook: SongCountHook) {
+    this.songCountHooks.push(hook)
+    hook(this.remaining)
+  },
+  removeHook(hook: SongCountHook) {
+    this.songCountHooks.splice(this.songCountHooks.indexOf(hook), 1)
+  },
+}
+
+export const startSongCountExit = (count: number) => {
+  songCountTools.start(count)
+}
+export const stopSongCountExit = () => {
+  songCountTools.clear()
+}
+export const getSongCountRemaining = () => songCountTools.remaining
+export const onSongEnd = () => {
+  songCountTools.onSongEnd()
+}
+
+export const useSongCountInfo = () => {
+  const [remaining, setRemaining] = useState(songCountTools.remaining)
+  useEffect(() => {
+    const hook: SongCountHook = (r) => setRemaining(r)
+    songCountTools.addHook(hook)
+    return () => { songCountTools.removeHook(hook) }
+  }, [])
+  return remaining
 }
