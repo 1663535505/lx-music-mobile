@@ -21,6 +21,7 @@ import {
 } from '@/core/player/tempPlayList'
 import { getMusicUrl, getPicPath, getLyricInfo } from '@/core/music'
 import { submitPlayRequest, getLocalPath, isAutoSaveOnPlay } from '@/core/download'
+import { enqueueOnPlay } from '@/core/download/idleDownloader'
 import { requestMsg } from '@/utils/message'
 import { getRandom } from '@/utils/common'
 import { filterList } from './utils'
@@ -65,7 +66,7 @@ const createGettingUrlId = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
   return `${musicInfo.id}_${tInfo?.id ?? ''}`
 }
 /**
- * 检查音乐信息是否已更改
+ * 妫€鏌ラ煶涔愪俊鎭槸鍚﹀凡鏇存敼
  */
 const diffCurrentMusicInfo = (curMusicInfo: LX.Music.MusicInfo | LX.Download.ListItem): boolean => {
   // return curMusicInfo !== playerState.playMusicInfo.musicInfo || playerState.isPlay
@@ -143,7 +144,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
   if (cancelDelayRetry) cancelDelayRetry()
   global.lx.gettingUrlId = createGettingUrlId(musicInfo)
 
-  // Download mode: check local → download → play from local
+  // Download mode: check local 鈫?download 鈫?play from local
   if (isAutoSaveOnPlay()) {
     const onlineMusicInfo = ('progress' in musicInfo ? musicInfo.metadata.musicInfo : musicInfo) as LX.Music.MusicInfoOnline
 
@@ -155,7 +156,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
 
         if (localPath) {
           console.log(`[PLAYER] setMusicUrl: LOCAL HIT id=${musicId} path="${localPath}"`)
-          // Found locally — play immediately, no network request
+          // Found locally 鈥?play immediately, no network request
           setResource(musicInfo, localPath, playerState.progress.nowPlayTime)
           global.lx.gettingUrlId = ''
           clearLoadTimeout()
@@ -163,7 +164,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
         }
 
         console.log(`[PLAYER] setMusicUrl: LOCAL MISS, fetching URL for id=${musicId}`)
-        // Step 2: Not local — get URL then submit to download scheduler
+        // Step 2: Not local 鈥?get URL then submit to download scheduler
         void getMusicPlayUrl(musicInfo, isRefresh).then(url => {
           if (!url || !diffCurrentMusicInfo(musicInfo)) return
           console.log(`[PLAYER] setMusicUrl: URL fetched, submitting play download request id=${musicId} url=${url.substring(0, 80)}`)
@@ -172,7 +173,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
           void submitPlayRequest(
             onlineMusicInfo,
             (localPath) => {
-              // Download complete — play from local file
+              // Download complete 鈥?play from local file
               console.log(`[PLAYER] setMusicUrl: play download COMPLETE id=${musicId} path="${localPath}"`)
               if (diffCurrentMusicInfo(musicInfo)) {
                 setResource(musicInfo, localPath, playerState.progress.nowPlayTime)
@@ -183,7 +184,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
               }
             },
             () => {
-              // Download failed — fall back to streaming from URL
+              // Download failed 鈥?fall back to streaming from URL
               console.log(`[PLAYER] setMusicUrl: play download FAILED, falling back to streaming id=${musicId} url=${url.substring(0, 80)}`)
               if (diffCurrentMusicInfo(musicInfo)) {
                 setResource(musicInfo, url, playerState.progress.nowPlayTime)
@@ -212,6 +213,11 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
     if (!url) { console.log(`[PLAYER] setMusicUrl: URL is null, abort id=${musicId}`); return }
     console.log(`[PLAYER] setMusicUrl: URL OK, calling setResource id=${musicId} url=${url.substring(0, 80)}`)
     setResource(musicInfo, url, playerState.progress.nowPlayTime)
+
+    // Enqueue for idle background download (non-blocking)
+    if (!isAutoSaveOnPlay() && musicInfo && 'source' in musicInfo && musicInfo.source !== 'local') {
+      void enqueueOnPlay(musicInfo as LX.Music.MusicInfoOnline)
+    }
   }).catch((err: any) => {
     console.log(`[PLAYER] setMusicUrl: ERROR id=${musicId} err="${err.message}"`)
     setStatusText(err.message as string)
@@ -225,7 +231,7 @@ export const setMusicUrl = (musicInfo: LX.Music.MusicInfo | LX.Download.ListItem
   })
 }
 
-// 恢复上次播放的状态
+// 鎭㈠涓婃鎾斁鐨勭姸鎬?
 const handleRestorePlay = async(restorePlayInfo: LX.Player.SavedPlayInfo) => {
   const musicInfo = playerState.playMusicInfo.musicInfo
   if (!musicInfo) return
@@ -297,7 +303,7 @@ const debouncePlay = debounceBackgroundTimer((musicInfo: LX.Player.PlayMusic) =>
   })
 }, 200)
 
-// 处理音乐播放
+// 澶勭悊闊充箰鎾斁
 const handlePlay = async() => {
   const _mInfo = playerState.playMusicInfo.musicInfo
   const _name = _mInfo ? ('progress' in _mInfo ? _mInfo.metadata.musicInfo.name : _mInfo.name) : 'unknown'
@@ -342,9 +348,9 @@ const handlePlay = async() => {
 }
 
 /**
- * 播放列表内歌曲
- * @param listId 列表id
- * @param id 歌曲id
+ * 鎾斁鍒楄〃鍐呮瓕鏇?
+ * @param listId 鍒楄〃id
+ * @param id 姝屾洸id
  */
 export const playListById = async(listId: string, id: string) => {
   const prevListId = playerState.playInfo.playerListId
@@ -358,9 +364,9 @@ export const playListById = async(listId: string, id: string) => {
 }
 
 /**
- * 播放列表内歌曲
- * @param listId 列表id
- * @param index 播放的歌曲位置
+ * 鎾斁鍒楄〃鍐呮瓕鏇?
+ * @param listId 鍒楄〃id
+ * @param index 鎾斁鐨勬瓕鏇蹭綅缃?
  */
 export const playList = async(listId: string, index: number) => {
   const list = getList(listId)
@@ -395,7 +401,7 @@ export const resetRandomNextMusicInfo = () => {
 }
 
 export const getNextPlayMusicInfo = async(): Promise<LX.Player.PlayMusicInfo | null> => {
-  if (playerState.tempPlayList.length) { // 如果稍后播放列表存在歌曲则直接播放改列表的歌曲
+  if (playerState.tempPlayList.length) { // 濡傛灉绋嶅悗鎾斁鍒楄〃瀛樺湪姝屾洸鍒欑洿鎺ユ挱鏀炬敼鍒楄〃鐨勬瓕鏇?
     const playMusicInfo = playerState.tempPlayList[0]
     return playMusicInfo
   }
@@ -412,7 +418,7 @@ export const getNextPlayMusicInfo = async(): Promise<LX.Player.PlayMusicInfo | n
   const currentList = getList(currentListId)
 
   const playedList = playerState.playedList
-  if (playedList.length) { // 移除已播放列表内不存在原列表的歌曲
+  if (playedList.length) { // 绉婚櫎宸叉挱鏀惧垪琛ㄥ唴涓嶅瓨鍦ㄥ師鍒楄〃鐨勬瓕鏇?
     let currentId: string
     if (playMusicInfo.isTempPlay) {
       const musicInfo = currentList[playInfo.playerPlayIndex]
@@ -420,7 +426,7 @@ export const getNextPlayMusicInfo = async(): Promise<LX.Player.PlayMusicInfo | n
     } else {
       currentId = playMusicInfo.musicInfo!.id
     }
-    // 从已播放列表移除播放列表已删除的歌曲
+    // 浠庡凡鎾斁鍒楄〃绉婚櫎鎾斁鍒楄〃宸插垹闄ょ殑姝屾洸
     let index
     for (index = playedList.findIndex(m => m.musicInfo.id === currentId) + 1; index < playedList.length; index++) {
       const playMusicInfo = playedList[index]
@@ -434,8 +440,8 @@ export const getNextPlayMusicInfo = async(): Promise<LX.Player.PlayMusicInfo | n
 
     if (index < playedList.length) return playedList[index]
   }
-  // const isCheckFile = findNum > 2 // 针对下载列表，如果超过两次都碰到无效歌曲，则过滤整个列表内的无效歌曲
-  let { filteredList, playerIndex } = await filterList({ // 过滤已播放歌曲
+  // const isCheckFile = findNum > 2 // 閽堝涓嬭浇鍒楄〃锛屽鏋滆秴杩囦袱娆￠兘纰板埌鏃犳晥姝屾洸锛屽垯杩囨护鏁翠釜鍒楄〃鍐呯殑鏃犳晥姝屾洸
+  let { filteredList, playerIndex } = await filterList({ // 杩囨护宸叉挱鏀炬瓕鏇?
     listId: currentListId,
     list: currentList,
     playedList,
@@ -484,8 +490,8 @@ const handlePlayNext = async(playMusicInfo: LX.Player.PlayMusicInfo) => {
   await handlePlay()
 }
 /**
- * 下一曲
- * @param isAutoToggle 是否自动切换
+ * 涓嬩竴鏇?
+ * @param isAutoToggle 鏄惁鑷姩鍒囨崲
  * @returns
  */
 export const playNext = async(isAutoToggle = false): Promise<void> => {
@@ -494,7 +500,7 @@ export const playNext = async(isAutoToggle = false): Promise<void> => {
     const { onSongEnd } = await import('@/core/player/timeoutExit')
     onSongEnd()
   }
-  if (playerState.tempPlayList.length) { // 如果稍后播放列表存在歌曲则直接播放改列表的歌曲
+  if (playerState.tempPlayList.length) { // 濡傛灉绋嶅悗鎾斁鍒楄〃瀛樺湪姝屾洸鍒欑洿鎺ユ挱鏀炬敼鍒楄〃鐨勬瓕鏇?
     const playMusicInfo = playerState.tempPlayList[0]
     removeTempPlayList(0)
     await handlePlayNext(playMusicInfo)
@@ -512,7 +518,7 @@ export const playNext = async(isAutoToggle = false): Promise<void> => {
 
   const playedList = playerState.playedList
 
-  if (playedList.length) { // 移除已播放列表内不存在原列表的歌曲
+  if (playedList.length) { // 绉婚櫎宸叉挱鏀惧垪琛ㄥ唴涓嶅瓨鍦ㄥ師鍒楄〃鐨勬瓕鏇?
     let currentId: string
     if (playMusicInfo.isTempPlay) {
       const musicInfo = currentList[playInfo.playerPlayIndex]
@@ -520,7 +526,7 @@ export const playNext = async(isAutoToggle = false): Promise<void> => {
     } else {
       currentId = playMusicInfo.musicInfo.id
     }
-    // 从已播放列表移除播放列表已删除的歌曲
+    // 浠庡凡鎾斁鍒楄〃绉婚櫎鎾斁鍒楄〃宸插垹闄ょ殑姝屾洸
     let index
     for (index = playedList.findIndex(m => m.musicInfo.id === currentId) + 1; index < playedList.length; index++) {
       const playMusicInfo = playedList[index]
@@ -541,8 +547,8 @@ export const playNext = async(isAutoToggle = false): Promise<void> => {
     await handlePlayNext(randomNextMusicInfo.info)
     return
   }
-  // const isCheckFile = findNum > 2 // 针对下载列表，如果超过两次都碰到无效歌曲，则过滤整个列表内的无效歌曲
-  let { filteredList, playerIndex } = await filterList({ // 过滤已播放歌曲
+  // const isCheckFile = findNum > 2 // 閽堝涓嬭浇鍒楄〃锛屽鏋滆秴杩囦袱娆￠兘纰板埌鏃犳晥姝屾洸锛屽垯杩囨护鏁翠釜鍒楄〃鍐呯殑鏃犳晥姝屾洸
+  let { filteredList, playerIndex } = await filterList({ // 杩囨护宸叉挱鏀炬瓕鏇?
     listId: currentListId,
     list: currentList,
     playedList,
@@ -590,7 +596,7 @@ export const playNext = async(isAutoToggle = false): Promise<void> => {
 }
 
 /**
- * 上一曲
+ * 涓婁竴鏇?
  */
 export const playPrev = async(isAutoToggle = false): Promise<void> => {
   const playMusicInfo = playerState.playMusicInfo
@@ -610,7 +616,7 @@ export const playPrev = async(isAutoToggle = false): Promise<void> => {
     } else {
       currentId = playMusicInfo.musicInfo.id
     }
-    // 从已播放列表移除播放列表已删除的歌曲
+    // 浠庡凡鎾斁鍒楄〃绉婚櫎鎾斁鍒楄〃宸插垹闄ょ殑姝屾洸
     let index
     for (index = playedList.findIndex(m => m.musicInfo.id === currentId) - 1; index > -1; index--) {
       const playMusicInfo = playedList[index]
@@ -629,7 +635,7 @@ export const playPrev = async(isAutoToggle = false): Promise<void> => {
   }
 
   // const isCheckFile = findNum > 2
-  let { filteredList, playerIndex } = await filterList({ // 过滤已播放歌曲
+  let { filteredList, playerIndex } = await filterList({ // 杩囨护宸叉挱鏀炬瓕鏇?
     listId: currentListId,
     list: currentList,
     playedList,
@@ -677,7 +683,7 @@ export const playPrev = async(isAutoToggle = false): Promise<void> => {
 }
 
 /**
- * 恢复播放
+ * 鎭㈠鎾斁
  */
 export const play = () => {
   if (playerState.playMusicInfo.musicInfo == null) return
@@ -689,14 +695,14 @@ export const play = () => {
 }
 
 /**
- * 暂停播放
+ * 鏆傚仠鎾斁
  */
 export const pause = async() => {
   await setPause()
 }
 
 /**
- * 停止播放
+ * 鍋滄鎾斁
  */
 export const stop = async() => {
   await setStop()
@@ -706,7 +712,7 @@ export const stop = async() => {
 }
 
 /**
- * 播放、暂停播放切换
+ * 鎾斁銆佹殏鍋滄挱鏀惧垏鎹?
  */
 export const togglePlay = () => {
   global.lx.isPlayedStop &&= false
@@ -718,7 +724,7 @@ export const togglePlay = () => {
 }
 
 /**
- * 收藏当前播放的歌曲
+ * 鏀惰棌褰撳墠鎾斁鐨勬瓕鏇?
  */
 export const collectMusic = () => {
   if (!playerState.playMusicInfo.musicInfo) return
@@ -730,7 +736,7 @@ export const collectMusic = () => {
 }
 
 /**
- * 取消收藏当前播放的歌曲
+ * 鍙栨秷鏀惰棌褰撳墠鎾斁鐨勬瓕鏇?
  */
 export const uncollectMusic = () => {
   if (!playerState.playMusicInfo.musicInfo) return
@@ -742,7 +748,7 @@ export const uncollectMusic = () => {
 }
 
 /**
- * 不喜欢当前播放的歌曲
+ * 涓嶅枩娆㈠綋鍓嶆挱鏀剧殑姝屾洸
  */
 export const dislikeMusic = async() => {
   if (!playerState.playMusicInfo.musicInfo) return

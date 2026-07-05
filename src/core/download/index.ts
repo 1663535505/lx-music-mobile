@@ -1,4 +1,4 @@
-import { getListMusics } from '@/core/list'
+﻿import { getListMusics } from '@/core/list'
 import settingState from '@/store/setting/state'
 import { isSongDownloaded, removeSongDownloaded } from '@/utils/data'
 import { existsFile } from '@/utils/fs'
@@ -75,3 +75,17 @@ export const isAutoSaveOnPlay = (): boolean => {
 export const isAutoDownloadList = (): boolean => {
   return settingState.setting['download.isAutoDownloadList'] && isDownloadEnabled()
 }
+
+// ==================== Idle Downloader ====================
+export {
+  initIdleDownloader,
+  destroyIdleDownloader,
+  isIdleDownloaderEnabled,
+  resetIdleQueue,
+} from './idleDownloader'
+
+// ==================== Disk Check ====================
+export {
+  getFreeDiskSpace,
+  hasEnoughDiskSpace,
+} from './diskCheck'

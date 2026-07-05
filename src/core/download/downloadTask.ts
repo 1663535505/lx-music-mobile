@@ -1,4 +1,4 @@
-import { downloadFile, existsFile, mkdir, unlink } from '@/utils/fs'
+﻿import { downloadFile, existsFile, mkdir, unlink, diagnoseSavePath } from '@/utils/fs'
 import { formatMusicName } from '@/utils/tools'
 import { getRandom } from '@/utils/common'
 import settingState from '@/store/setting/state'
@@ -67,6 +67,11 @@ export const downloadSingleSong = (
     console.log(`[DL] downloadSingleSong: savePath="${savePath}"`)
     console.log(`[DL] downloadSingleSong: filePath="${filePath}" tempPath="${tempPath}"`)
     const startDownload = async() => {
+      // ---- Save Path Diagnostics (first download only) ----
+      if (!(globalThis as any).__savePathDiagDone) {
+        (globalThis as any).__savePathDiagDone = true
+        try { await diagnoseSavePath(savePath) } catch (diagErr: any) { console.log('[SAF_DIAG] ERROR:', diagErr.message) }
+      }
       // For regular file paths, ensure save directory exists
       // For SAF URIs, the directory should already exist (user selected it via SAF)
       if (!isSafUri) {
@@ -167,6 +172,19 @@ export const downloadSingleSong = (
         }
 
         console.log(`[DL] downloadSingleSong: SUCCESS name="${musicInfo.name}" filePath="${filePath}"`)
+
+        // Trigger Android media scanner so file manager recognizes the file
+        if (isSafUri) {
+          try {
+            const RNFS_scan = require('react-native-fs')
+            if (RNFS_scan.scanFile) {
+              RNFS_scan.scanFile('/storage/emulated/0/Download')
+              console.log('[DL] downloadSingleSong: scanFile triggered for /storage/emulated/0/Download')
+            }
+          } catch (scanErr: any) {
+            console.log('[DL] downloadSingleSong: scanFile ERROR (non-fatal):', scanErr.message)
+          }
+        }
         resolve({ success: true, filePath })
       } catch (err: any) {
         console.log(`[DL] downloadSingleSong: ERROR name="${musicInfo.name}" err="${err.message}" code=${err.code}`)

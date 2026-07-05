@@ -1,4 +1,4 @@
-import settingState from '@/store/setting/state'
+﻿import settingState from '@/store/setting/state'
 import { getMusicUrl } from '@/core/music/online'
 import { getPlayQuality } from '@/core/music/utils'
 import { isSongDownloaded, setSongDownloaded, saveDownloadQueue, getDownloadQueue, clearDownloadQueueStorage } from '@/utils/data'
@@ -7,6 +7,7 @@ import { isWifi } from '@/utils/network'
 import { setStatusText } from '@/core/player/playStatus'
 import { toast } from '@/utils/tools'
 import { downloadSingleSong, buildFilePath, buildTempPath, type CancelDownloadFn } from './downloadTask'
+import { diagnoseSavePath } from '@/utils/fs'
 import type { DownloadTaskResult } from './types'
 import { shouldRetry, getRetryDelay, getRetryConfig } from './retryPolicy'
 
@@ -203,7 +204,7 @@ const processPlayDownload = async(
     console.log(`[DL] processPlayDownload: using initialUrl for "${musicInfo.name}" url=${url.substring(0, 80)}`)
   } else {
     console.log(`[DL] processPlayDownload: fetching URL for "${musicInfo.name}" quality=${quality}`)
-    setStatusText('正在获取URL...')
+    setStatusText('姝ｅ湪鑾峰彇URL...')
     try {
       url = await getMusicUrl({ musicInfo, quality, isRefresh: false })
       console.log(`[DL] processPlayDownload: URL OK for "${musicInfo.name}" url=${url.substring(0, 80)}`)
@@ -229,7 +230,7 @@ const processPlayDownload = async(
   if (!playTask || playTask.id !== task.id) return // preempted during URL fetch
 
   console.log(`[DL] processPlayDownload: starting download for "${musicInfo.name}" id=${task.id}`)
-  setStatusText('正在下载... 0%')
+  setStatusText('姝ｅ湪涓嬭浇... 0%')
   task.status = 'downloading'
   notifyUpdate()
 
@@ -242,7 +243,7 @@ const processPlayDownload = async(
     task.downloaded = downloaded
     task.total = total
     task.progress = total > 0 ? Math.round((downloaded / total) * 100) : 0
-    setStatusText(`正在下载... ${task.progress}%`)
+    setStatusText(`姝ｅ湪涓嬭浇... ${task.progress}%`)
     notifyUpdate()
   })
 
@@ -283,7 +284,7 @@ const processPlayDownload = async(
       task.retryCount++
       task.status = 'waiting'
       const delay = getRetryDelay(task.retryCount - 1)
-      setStatusText(`下载失败，${Math.round(delay / 1000)}秒后重试 (${task.retryCount}/${getRetryConfig().maxRetries})...`)
+      setStatusText(`涓嬭浇澶辫触锛?{Math.round(delay / 1000)}绉掑悗閲嶈瘯 (${task.retryCount}/${getRetryConfig().maxRetries})...`)
       notifyUpdate()
       persistQueues()
       const gen = generation
@@ -338,6 +339,12 @@ const processNextBackgroundTask = async() => {
   if (settingState.setting['download.wifiOnly']) {
     const wifi = await isWifi()
     if (wifi === false) { console.log('[DL] processNextBackgroundTask: ABORT - wifiOnly and not wifi'); isProcessing = false; return }
+  }
+
+  // ---- One-time save path diagnostic ----
+  if (!(globalThis as any).__schedulerSavePathDiagDone) {
+    (globalThis as any).__schedulerSavePathDiagDone = true
+    try { await diagnoseSavePath(savePath) } catch (e: any) { console.log('[SAF_DIAG] scheduler diagnoseSavePath ERROR:', e.message) }
   }
 
   // Pick next task: pending first, then batch
@@ -498,8 +505,14 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
 }
 
 // ==================== Batch queue ====================
-export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[]): Promise<number> => {
-  console.log('[DL] addToBatchQueue: input count =', musicInfos.length)
+export interface AddToBatchQueueOptions {
+  /** When true, do NOT auto-start processNextBackgroundTask even if idle. */
+  enqueueOnly?: boolean
+}
+
+export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[], options?: AddToBatchQueueOptions): Promise<number> => {
+  const enqueueOnly = !!options?.enqueueOnly
+  console.log('[DL] addToBatchQueue: input count =', musicInfos.length, 'enqueueOnly =', enqueueOnly)
   await restoreQueues()
   let added = 0
   for (const info of musicInfos) {
@@ -536,12 +549,13 @@ export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[]): Pr
     })
     added++
   }
-  console.log('[DL] addToBatchQueue: added =', added, 'batchQueue.length =', batchQueue.length, 'status =', status)
+  console.log('[DL] addToBatchQueue: added =', added, 'batchQueue.length =', batchQueue.length, 'status =', status, 'enqueueOnly =', enqueueOnly)
   if (added > 0) {
     notifyUpdate()
     persistQueues()
-    // Start processing if idle
-    if (status === 'idle') void processNextBackgroundTask()
+    if (!enqueueOnly && status === 'idle') {
+      void processNextBackgroundTask()
+    }
   }
   return added
 }
@@ -657,3 +671,5 @@ export const retryAllFailed = () => {
     if (status === 'idle') void processNextBackgroundTask()
   }
 }
+
+
