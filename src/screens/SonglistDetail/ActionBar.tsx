@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, useRef, useCallback } from 'react'
 import { View } from 'react-native'
 import Button from '@/components/common/Button'
+import ActionSheet, { type ActionSheetType, type ActionSheetOption } from '@/components/common/ActionSheet'
 
 import { createStyle } from '@/utils/tools'
 import { pop } from '@/navigation'
@@ -13,10 +14,15 @@ import { useI18n } from '@/lang'
 import { useListInfo } from './state'
 // import { NAV_SHEAR_NATIVE_IDS } from '@/config/constant'
 
-export default memo(() => {
+export interface ActionBarProps {
+  onEnterMultiSelectMode?: () => void
+}
+
+export default memo(({ onEnterMultiSelectMode }: ActionBarProps) => {
   const theme = useTheme()
   const t = useI18n()
   const info = useListInfo()
+  const actionSheetRef = useRef<ActionSheetType>(null)
 
   const back = () => {
     void pop(commonState.componentIds.songlistDetail!)
@@ -32,10 +38,23 @@ export default memo(() => {
     void handleCollect(info.id, info.source, songlistState.listDetailInfo.info.name || info.name)
   }
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     if (!songlistState.listDetailInfo.info.name) return
-    void handleDownloadAll(info.id, info.source, songlistState.listDetailInfo.list)
-  }
+    actionSheetRef.current?.show()
+  }, [])
+
+  const handleSelectOption = useCallback((option: ActionSheetOption) => {
+    if (option.value === 'download_all') {
+      void handleDownloadAll(info.id, info.source, songlistState.listDetailInfo.list)
+    } else if (option.value === 'select_download') {
+      onEnterMultiSelectMode?.()
+    }
+  }, [info.id, info.source, onEnterMultiSelectMode])
+
+  const downloadOptions: ActionSheetOption[] = [
+    { label: t('download_all'), value: 'download_all' },
+    { label: t('select_download'), value: 'select_download' },
+  ]
 
   return (
     <View style={styles.container}>
@@ -51,6 +70,11 @@ export default memo(() => {
       <Button onPress={back} style={styles.controlBtn}>
         <Text style={{ ...styles.controlBtnText, color: theme['c-button-font'] }}>{t('back')}</Text>
       </Button>
+      <ActionSheet
+        ref={actionSheetRef}
+        options={downloadOptions}
+        onSelect={handleSelectOption}
+      />
     </View>
   )
 })

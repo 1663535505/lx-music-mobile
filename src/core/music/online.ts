@@ -46,17 +46,17 @@ export const getMusicUrl = async({ musicInfo, quality, isRefresh, allowToggleSou
   allowToggleSource?: boolean
   onToggleSource?: (musicInfo?: LX.Music.MusicInfoOnline) => void
 }): Promise<string> => {
-  // if (!musicInfo._types[type]) {
-  //   // 兼容旧版酷我源搜索列表过滤128k音质的bug
-  //   if (!(musicInfo.source == 'kw' && type == '128k')) throw new Error('该歌曲没有可播放的音频')
-
-  //   // return Promise.reject(new Error('该歌曲没有可播放的音频'))
-  // }
   const targetQuality = quality ?? getPlayQuality(settingState.setting['player.playQuality'], musicInfo)
+  console.log(`[MUSIC] getMusicUrl: name="${musicInfo.name}" source=${musicInfo.source} quality=${targetQuality} isRefresh=${isRefresh}`)
   const cachedUrl = await getStoreMusicUrl(musicInfo, targetQuality)
-  if (cachedUrl && !isRefresh) return cachedUrl
+  if (cachedUrl && !isRefresh) {
+    console.log(`[MUSIC] getMusicUrl: CACHE HIT name="${musicInfo.name}" url=${cachedUrl.substring(0, 80)}`)
+    return cachedUrl
+  }
 
+  console.log(`[MUSIC] getMusicUrl: fetching online name="${musicInfo.name}"`)
   return handleGetOnlineMusicUrl({ musicInfo, quality, onToggleSource, isRefresh, allowToggleSource }).then(({ url, quality: targetQuality, musicInfo: targetMusicInfo, isFromCache }) => {
+    console.log(`[MUSIC] getMusicUrl: SUCCESS name="${musicInfo.name}" quality=${targetQuality} isFromCache=${isFromCache} url=${url.substring(0, 80)}`)
     if (targetMusicInfo.id != musicInfo.id && !isFromCache) void saveMusicUrl(targetMusicInfo, targetQuality, url)
     void saveMusicUrl(musicInfo, targetQuality, url)
     return url

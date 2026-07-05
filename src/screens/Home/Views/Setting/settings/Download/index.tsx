@@ -2,14 +2,32 @@ import { memo, useCallback, useMemo, useState } from 'react'
 import { View, Text, TouchableOpacity } from 'react-native'
 import { updateSetting } from '@/core/common'
 import { useI18n } from '@/lang'
-import { createStyle, toast } from '@/utils/tools'
+import { confirmDialog, createStyle, toast } from '@/utils/tools'
 import { useSettingValue } from '@/store/setting/hook'
-import { selectManagedFolder } from '@/utils/fs'
+import { selectManagedFolder, writeFile, unlink } from '@/utils/fs'
 import settingState from '@/store/setting/state'
 import CheckBox from '@/components/common/CheckBox'
 import { TRY_QUALITYS_LIST } from '@/core/music/utils'
 import CheckBoxItem from '../../components/CheckBoxItem'
 import Section from '../../components/Section'
+
+const extractFolderName = (path: string): string => {
+  if (path.startsWith('content://')) {
+    // Extract folder name from SAF URI
+    // e.g. content://com.android.providers.downloads.documents/tree/primary%3AMusic -> Music
+    const decoded = decodeURIComponent(path)
+    const lastSlash = decoded.lastIndexOf('/')
+    if (lastSlash !== -1) {
+      const name = decoded.substring(lastSlash + 1)
+      // Remove any trailing path segments
+      return name.split(':')[1] || name
+    }
+    return decoded
+  }
+  // Regular path: get last directory name
+  const parts = path.split('/').filter(Boolean)
+  return parts[parts.length - 1] || path
+}
 
 export default memo(() => {
   const t = useI18n()
@@ -48,6 +66,15 @@ export default memo(() => {
     try {
       const result = await selectManagedFolder(true)
       if (result.isDirectory && result.path) {
+        // Verify write access by writing a test file
+        const testPath = `${result.path}/.write_test`
+        try {
+          await writeFile(testPath, 'test', 'utf8')
+          await unlink(testPath)
+        } catch {
+          toast(t('setting_download_path_test_fail'))
+          return
+        }
         updateSetting({ 'download.savePath': result.path })
       }
     } catch (err) {
@@ -55,21 +82,45 @@ export default memo(() => {
     } finally {
       setSelecting(false)
     }
-  }, [selecting])
+  }, [selecting, t])
 
-  const displayPath = savePath
-    ? savePath.length > 40
-      ? '...' + savePath.substring(savePath.length - 37)
-      : savePath
-    : t('setting_download_path_not_set')
+  const handleClearPath = useCallback(async() => {
+    const confirm = await confirmDialog({
+      message: t('setting_download_path_confirm_clear'),
+      cancelButtonText: t('cancel_button_text_2'),
+      confirmButtonText: t('confirm_button_text'),
+      bgClose: false,
+    })
+    if (!confirm) return
+    const updates: Partial<LX.AppSetting> = { 'download.savePath': '' }
+    if (settingState.setting['download.isAutoSaveOnPlay']) updates['download.isAutoSaveOnPlay'] = false
+    if (settingState.setting['download.isAutoDownloadList']) updates['download.isAutoDownloadList'] = false
+    updateSetting(updates)
+  }, [t])
+
+  const folderName = savePath ? extractFolderName(savePath) : ''
 
   return (
     <Section title={t('setting_download')}>
       <View style={styles.pathContainer}>
         <Text style={styles.pathLabel}>{t('setting_download_path')}</Text>
-        <TouchableOpacity style={styles.pathButton} onPress={handleSelectPath}>
-          <Text style={styles.pathText} numberOfLines={1}>{displayPath}</Text>
-        </TouchableOpacity>
+        <View style={styles.pathRow}>
+          <TouchableOpacity style={styles.pathButton} onPress={handleSelectPath}>
+            {savePath ? (
+              <>
+                <Text style={styles.pathFolderName} numberOfLines={1}>{folderName}</Text>
+                <Text style={styles.pathFullPath} numberOfLines={1}>{savePath}</Text>
+              </>
+            ) : (
+              <Text style={styles.pathText}>{t('setting_download_path_not_set')}</Text>
+            )}
+          </TouchableOpacity>
+          {savePath ? (
+            <TouchableOpacity style={styles.clearButton} onPress={handleClearPath}>
+              <Text style={styles.clearButtonText}>{t('setting_download_path_clear')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
       <CheckBoxItem
         check={isAutoSaveOnPlay}
@@ -137,7 +188,12 @@ const styles = createStyle({
     fontSize: 14,
     marginBottom: 6,
   },
+  pathRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   pathButton: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 6,
@@ -147,6 +203,27 @@ const styles = createStyle({
   pathText: {
     fontSize: 13,
     color: '#666',
+  },
+  pathFolderName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  pathFullPath: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 2,
+  },
+  clearButton: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  clearButtonText: {
+    fontSize: 13,
+    color: '#f44336',
   },
   qualitySection: {
     paddingHorizontal: 25,

@@ -67,7 +67,7 @@ const registerPlaybackService = async() => {
   // })
 
   TrackPlayer.addEventListener(TPEvent.PlaybackError, async(err: any) => {
-    console.log('playback-error', err)
+    console.log('[PLAYER] PlaybackError:', JSON.stringify(err))
     global.app_event.error()
     global.app_event.playerError()
   })
@@ -77,6 +77,8 @@ const registerPlaybackService = async() => {
   })
 
   TrackPlayer.addEventListener(TPEvent.PlaybackState, async info => {
+    const trackId = global.lx.playerTrackId ?? 'null'
+    console.log(`[PLAYER] PlaybackState: state=${info.state} trackId=${trackId} gettingUrlId=${global.lx.gettingUrlId || 'none'} isTempId=${isTempId()}`)
     if (global.lx.gettingUrlId || isTempId()) return
     // let currentIsPlaying = false
 

@@ -6,7 +6,7 @@ import ListMenu, { type ListMenuType, type Position, type SelectInfo } from './L
 import ListMusicMultiAdd, { type MusicMultiAddModalType as ListAddMultiType } from '@/components/MusicMultiAddModal'
 import ListMusicAdd, { type MusicAddModalType as ListMusicAddType } from '@/components/MusicAddModal'
 import MultipleModeBar, { type MultipleModeBarType, type SelectMode } from './MultipleModeBar'
-import { handleDislikeMusic, handlePlay, handlePlayLater, handleShare, handleShowMusicSourceDetail, handleDownloadSelected } from './listAction'
+import { handleDislikeMusic, handlePlay, handlePlayLater, handleShare, handleShowMusicSourceDetail, handleDownloadSelected, handleDownloadSingle } from './listAction'
 import { createStyle } from '@/utils/tools'
 
 export interface OnlineListProps {
@@ -21,6 +21,7 @@ export interface OnlineListProps {
 export interface OnlineListType {
   setList: (list: LX.Music.MusicInfoOnline[], isAppend?: boolean, showSource?: boolean) => void
   setStatus: (val: Status) => void
+  enterMultiSelectMode: () => void
 }
 
 export default forwardRef<OnlineListType, OnlineListProps>(({
@@ -46,6 +47,10 @@ export default forwardRef<OnlineListType, OnlineListProps>(({
     },
     setStatus(val) {
       listRef.current?.setStatus(val)
+    },
+    enterMultiSelectMode() {
+      multipleModeBarRef.current?.show()
+      listRef.current?.setIsMultiSelectMode(true)
     },
   }))
 
@@ -117,6 +122,7 @@ export default forwardRef<OnlineListType, OnlineListProps>(({
         onAdd={handleAddMusic}
         onMusicSourceDetail={info => { void handleShowMusicSourceDetail(info.musicInfo) }}
         onDislikeMusic={info => { void handleDislikeMusic(info.musicInfo) }}
+        onDownload={info => { void handleDownloadSingle(info.musicInfo) }}
       />
       {/* <LoadingMask ref={loadingMaskRef} /> */}
     </View>

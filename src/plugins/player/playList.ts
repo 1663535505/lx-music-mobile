@@ -148,9 +148,11 @@ export const initTrackInfo = async(musicInfo: LX.Player.PlayMusic, mInfo: LX.Pla
 
 
 const handlePlayMusic = async(musicInfo: LX.Player.PlayMusic, url: string, time: number) => {
-// console.log(tracks, time)
+  const mInfo = formatMusicInfo(musicInfo)
+  console.log(`[PLAYER] handlePlayMusic: name="${mInfo.name}" id=${mInfo.id} url=${url.substring(0, 80)} time=${time}`)
   const tracks = buildTracks(musicInfo, url)
   const track = tracks[0]
+  console.log(`[PLAYER] handlePlayMusic: trackId=${track.id} isDefault=${isTempTrack(track.id as string)} queueSize=${list.length}`)
   // await updateMusicInfo(track)
   const currentTrackIndex = await TrackPlayer.getCurrentTrack()
   await TrackPlayer.add(tracks).then(() => list.push(...tracks))

@@ -41,6 +41,9 @@ let currentAbort: CancelDownloadFn | null = null
 let playStartTime = 0
 let pendingTimer: ReturnType<typeof setTimeout> | null = null
 let restored = false
+let paused = false
+let isProcessing = false
+let generation = 0
 
 // ==================== Notification ====================
 const notifyUpdate = () => {
@@ -123,20 +126,25 @@ export const submitPlayRequest = async(
   onError: (err: string) => void,
   initialUrl?: string,
 ) => {
+  console.log(`[DL] submitPlayRequest: name="${musicInfo.name}" id=${musicInfo.id} source=${musicInfo.source} hasInitialUrl=${!!initialUrl}`)
   await restoreQueues()
 
   const quality = getQuality(musicInfo)
   const savePath = settingState.setting['download.savePath']
-  if (!savePath) { onError('Save path not set'); return }
+  if (!savePath) { console.log('[DL] submitPlayRequest: ERROR - savePath not set'); onError('Save path not set'); return }
+
+  console.log(`[DL] submitPlayRequest: quality=${quality} savePath=${savePath.substring(0, 50)}`)
 
   // Check local registry
   const entry = await isSongDownloaded(musicInfo.id, quality)
   if (entry) {
     if (await existsFile(entry.filePath)) {
+      console.log(`[DL] submitPlayRequest: LOCAL HIT id=${musicInfo.id} path="${entry.filePath}"`)
       onComplete(entry.filePath)
       schedulePendingCheck()
       return
     }
+    console.log(`[DL] submitPlayRequest: registry entry exists but file missing, removing id=${musicInfo.id}`)
     await import('@/utils/data').then(m => m.removeSongDownloaded(musicInfo.id, quality))
   }
 
@@ -148,7 +156,7 @@ export const submitPlayRequest = async(
 
   // Move current play task to pending
   if (playTask && playTask.status === 'downloading') {
-    playTask.status = 'cancelled'
+    playTask.status = 'waiting'
     playTask.progress = 0
     playTask.downloaded = 0
     pendingQueue.unshift(playTask)
@@ -166,6 +174,7 @@ export const submitPlayRequest = async(
     retryCount: 0,
   }
   playTask = task
+  console.log('[DL] STATE: status', status, '-> downloading_play')
   status = 'downloading_play'
   playStartTime = 0
   clearPendingTimer()
@@ -191,14 +200,20 @@ const processPlayDownload = async(
   let url: string
   if (initialUrl) {
     url = initialUrl
+    console.log(`[DL] processPlayDownload: using initialUrl for "${musicInfo.name}" url=${url.substring(0, 80)}`)
   } else {
+    console.log(`[DL] processPlayDownload: fetching URL for "${musicInfo.name}" quality=${quality}`)
     setStatusText('正在获取URL...')
     try {
       url = await getMusicUrl({ musicInfo, quality, isRefresh: false })
-    } catch {
+      console.log(`[DL] processPlayDownload: URL OK for "${musicInfo.name}" url=${url.substring(0, 80)}`)
+    } catch (err1: any) {
+      console.log(`[DL] processPlayDownload: URL FAIL (1st) for "${musicInfo.name}" err="${err1.message}"`)
       try {
         url = await getMusicUrl({ musicInfo, quality, isRefresh: true })
+        console.log(`[DL] processPlayDownload: URL OK (retry) for "${musicInfo.name}" url=${url.substring(0, 80)}`)
       } catch (err: any) {
+        console.log(`[DL] processPlayDownload: URL FAIL (2nd) for "${musicInfo.name}" err="${err.message}"`)
         task.status = 'error'
         task.error = err.message || 'Failed to get URL'
         setStatusText(task.error!)
@@ -213,6 +228,7 @@ const processPlayDownload = async(
 
   if (!playTask || playTask.id !== task.id) return // preempted during URL fetch
 
+  console.log(`[DL] processPlayDownload: starting download for "${musicInfo.name}" id=${task.id}`)
   setStatusText('正在下载... 0%')
   task.status = 'downloading'
   notifyUpdate()
@@ -220,6 +236,7 @@ const processPlayDownload = async(
   // Download with cancellation support
   const filePath = buildFilePath(musicInfo, savePath, quality)
   const tempPath = buildTempPath(filePath)
+  console.log(`[DL] processPlayDownload: filePath="${filePath}" tempPath="${tempPath}"`)
 
   const { promise, cancel } = downloadSingleSong(musicInfo, savePath, url, (downloaded, total) => {
     task.downloaded = downloaded
@@ -232,9 +249,10 @@ const processPlayDownload = async(
   currentAbort = cancel
 
   const result = await promise
+  console.log(`[DL] processPlayDownload: download result for "${musicInfo.name}" success=${result.success} filePath=${result.filePath} error=${result.error}`)
 
   // If this task was preempted, don't process result
-  if (!playTask || playTask.id !== task.id) return
+  if (!playTask || playTask.id !== task.id) { console.log(`[DL] processPlayDownload: task preempted, discarding result`); return }
 
   currentAbort = null
 
@@ -247,6 +265,14 @@ const processPlayDownload = async(
     notifyUpdate()
     persistQueues()
     onComplete(result.filePath)
+    // Clear playTask after a delay so UI can show completion briefly
+    setTimeout(() => {
+      if (playTask?.id === task.id) {
+        playTask = null
+        if (status === 'playing') status = 'idle'
+        notifyUpdate()
+      }
+    }, 3000)
     // After play starts, schedule pending queue processing
     schedulePendingCheck()
   } else {
@@ -260,7 +286,9 @@ const processPlayDownload = async(
       setStatusText(`下载失败，${Math.round(delay / 1000)}秒后重试 (${task.retryCount}/${getRetryConfig().maxRetries})...`)
       notifyUpdate()
       persistQueues()
+      const gen = generation
       setTimeout(() => {
+        if (generation !== gen) return
         if (playTask && playTask.id === task.id && playTask.status === 'waiting') {
           void processPlayDownload(savePath, onComplete, onError)
         }
@@ -296,16 +324,20 @@ const schedulePendingCheck = () => {
 }
 
 const processNextBackgroundTask = async() => {
+  console.log('[DL] processNextBackgroundTask: status =', status, 'isProcessing =', isProcessing, 'hasAbort =', !!currentAbort, 'paused =', paused, 'pending =', pendingQueue.length, 'batch =', batchQueue.length)
   if (status === 'downloading_play') return
+  if (isProcessing) return // prevent concurrent execution
   if (currentAbort) return // already downloading
+  if (paused) return // paused by user
+  isProcessing = true
 
   const savePath = settingState.setting['download.savePath']
-  if (!savePath) return
+  if (!savePath) { console.log('[DL] processNextBackgroundTask: ABORT - no savePath'); isProcessing = false; return }
 
   // wifi-only check
   if (settingState.setting['download.wifiOnly']) {
     const wifi = await isWifi()
-    if (wifi === false) return
+    if (wifi === false) { console.log('[DL] processNextBackgroundTask: ABORT - wifiOnly and not wifi'); isProcessing = false; return }
   }
 
   // Pick next task: pending first, then batch
@@ -323,7 +355,7 @@ const processNextBackgroundTask = async() => {
   }
 
   if (!task && batchQueue.length > 0) {
-    const idx = batchQueue.findIndex(t => t.status === 'waiting' || t.status === 'error')
+    const idx = batchQueue.findIndex(t => t.status === 'waiting')
     if (idx !== -1) {
       task = batchQueue[idx]
       source = 'batch'
@@ -331,17 +363,21 @@ const processNextBackgroundTask = async() => {
   }
 
   if (!task) {
+    console.log('[DL] processNextBackgroundTask: NO TASK found, setting idle')
     if (status !== 'playing') status = 'idle'
+    isProcessing = false
     notifyUpdate()
     return
   }
 
+  console.log('[DL] processNextBackgroundTask: PICKED task -', task.musicInfo.name, 'id:', task.id, 'source:', source, 'quality:', task.quality)
   status = source === 'pending' ? 'downloading_pending' : 'downloading_batch'
   task.status = 'downloading'
   task.progress = 0
   task.downloaded = 0
   task.total = 0
   notifyUpdate()
+  isProcessing = false
 
   await processBackgroundDownload(task, savePath, source)
 }
@@ -349,10 +385,12 @@ const processNextBackgroundTask = async() => {
 const processBackgroundDownload = async(task: SchedulerTask, savePath: string, source: 'pending' | 'batch') => {
   const musicInfo = task.musicInfo
   const quality = task.quality
+  console.log('[DL] processBackgroundDownload: START -', musicInfo.name, 'quality:', quality, 'savePath:', savePath.substring(0, 50))
 
   // Check if already downloaded
   const entry = await isSongDownloaded(musicInfo.id, quality)
   if (entry && await existsFile(entry.filePath)) {
+    console.log('[DL] processBackgroundDownload: SKIP (already downloaded) -', musicInfo.name, 'filePath:', entry.filePath)
     task.status = 'skipped'
     task.progress = 100
     notifyUpdate()
@@ -366,10 +404,14 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
   let url: string
   try {
     url = await getMusicUrl({ musicInfo, quality, isRefresh: false })
-  } catch {
+    console.log('[DL] processBackgroundDownload: URL OK -', musicInfo.name, 'url:', url.substring(0, 80))
+  } catch (err1: any) {
+    console.log('[DL] processBackgroundDownload: URL FAIL (1st) -', musicInfo.name, 'err:', err1.message)
     try {
       url = await getMusicUrl({ musicInfo, quality, isRefresh: true })
+      console.log('[DL] processBackgroundDownload: URL OK (retry) -', musicInfo.name, 'url:', url.substring(0, 80))
     } catch (err: any) {
+      console.log('[DL] processBackgroundDownload: URL FAIL (2nd) -', musicInfo.name, 'err:', err.message)
       task.status = 'error'
       task.error = err.message || 'Failed to get URL'
       notifyUpdate()
@@ -382,12 +424,19 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
   // Check if preempted during URL fetch
   if (status === 'downloading_play') {
     task.status = 'waiting'
+    task.progress = 0
+    task.downloaded = 0
     if (source === 'pending') pendingQueue.unshift(task)
     notifyUpdate()
+    persistQueues()
     return
   }
 
   // Download
+  if (currentAbort) {
+    currentAbort()
+    currentAbort = null
+  }
   const { promise, cancel } = downloadSingleSong(musicInfo, savePath, url, (downloaded, total) => {
     task.downloaded = downloaded
     task.total = total
@@ -399,6 +448,7 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
 
   const result = await promise
   currentAbort = null
+  console.log('[DL] processBackgroundDownload: DOWNLOAD RESULT -', musicInfo.name, 'success:', result.success, 'filePath:', result.filePath, 'error:', result.error)
 
   if (result.success && result.filePath) {
     task.status = 'completed'
@@ -412,16 +462,20 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
       task.retryCount++
       task.status = 'waiting'
       const delay = getRetryDelay(task.retryCount - 1)
+      console.log(`[DL] processBackgroundDownload: RETRYING "${musicInfo.name}" attempt=${task.retryCount}/${getRetryConfig().maxRetries} delay=${Math.round(delay / 1000)}s`)
       notifyUpdate()
       persistQueues()
       // Schedule retry after delay
+      const gen = generation
       setTimeout(() => {
+        if (generation !== gen) return
         if (status !== 'downloading_play' && task.status === 'waiting') {
           void processBackgroundDownload(task, savePath, source)
         }
       }, delay)
       return
     } else {
+      console.log(`[DL] processBackgroundDownload: RETRIES EXHAUSTED "${musicInfo.name}" retryCount=${task.retryCount} -> marking error`)
       task.status = 'error'
     }
   }
@@ -430,7 +484,14 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
   persistQueues()
 
   // If preempted during download, don't continue (status may change during await)
-  if ((status as string) === 'downloading_play') return
+  if ((status as string) === 'downloading_play') {
+    if ((task.status as string) === 'downloading') {
+      task.status = 'waiting'
+      task.progress = 0
+      task.downloaded = 0
+    }
+    return
+  }
 
   // Process next
   void processNextBackgroundTask()
@@ -438,17 +499,31 @@ const processBackgroundDownload = async(task: SchedulerTask, savePath: string, s
 
 // ==================== Batch queue ====================
 export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[]): Promise<number> => {
+  console.log('[DL] addToBatchQueue: input count =', musicInfos.length)
   await restoreQueues()
   let added = 0
   for (const info of musicInfos) {
-    if (playTask?.id === info.id) continue
-    if (pendingQueue.some(t => t.id === info.id)) continue
-    if (batchQueue.some(t => t.id === info.id)) continue
+    if (playTask?.id === info.id) {
+      console.log('[DL] addToBatchQueue: skip (playTask) -', info.name, info.id)
+      continue
+    }
+    if (pendingQueue.some(t => t.id === info.id)) {
+      console.log('[DL] addToBatchQueue: skip (pendingQueue) -', info.name, info.id)
+      continue
+    }
+    if (batchQueue.some(t => t.id === info.id)) {
+      console.log('[DL] addToBatchQueue: skip (batchQueue) -', info.name, info.id)
+      continue
+    }
 
     const quality = getQuality(info)
     const entry = await isSongDownloaded(info.id, quality)
-    if (entry) continue
+    if (entry) {
+      console.log('[DL] addToBatchQueue: skip (registry) -', info.name, info.id, 'quality:', quality, 'filePath:', entry.filePath)
+      continue
+    }
 
+    console.log('[DL] addToBatchQueue: ADD -', info.name, info.id, 'source:', info.source, 'quality:', quality, '_qualitys:', JSON.stringify(info.meta?._qualitys))
     batchQueue.push({
       id: info.id,
       musicInfo: info,
@@ -461,6 +536,7 @@ export const addToBatchQueue = async(musicInfos: LX.Music.MusicInfoOnline[]): Pr
     })
     added++
   }
+  console.log('[DL] addToBatchQueue: added =', added, 'batchQueue.length =', batchQueue.length, 'status =', status)
   if (added > 0) {
     notifyUpdate()
     persistQueues()
@@ -476,14 +552,53 @@ export const startBatchQueue = () => {
 
 export const stopBatchQueue = () => {
   if (currentAbort && (status === 'downloading_batch' || status === 'downloading_pending')) {
+    // Reset the active task back to waiting so it can be retried
+    const activeQueue = status === 'downloading_pending' ? pendingQueue : batchQueue
+    const activeTask = activeQueue.find(t => t.status === 'downloading')
+    if (activeTask) {
+      activeTask.status = 'waiting'
+      activeTask.progress = 0
+      activeTask.downloaded = 0
+    }
     currentAbort()
     currentAbort = null
   }
   status = 'idle'
   notifyUpdate()
+  persistQueues()
 }
 
+export const pauseAllDownloads = () => {
+  paused = true
+  // Stop current download if it's a batch/pending download
+  if (currentAbort && (status === 'downloading_batch' || status === 'downloading_pending')) {
+    // Reset the active task back to waiting so it can resume later
+    const activeQueue = status === 'downloading_pending' ? pendingQueue : batchQueue
+    const activeTask = activeQueue.find(t => t.status === 'downloading')
+    if (activeTask) {
+      activeTask.status = 'waiting'
+      activeTask.progress = 0
+      activeTask.downloaded = 0
+    }
+    currentAbort()
+    currentAbort = null
+    status = 'idle'
+  }
+  notifyUpdate()
+  persistQueues()
+}
+
+export const resumeAllDownloads = () => {
+  paused = false
+  notifyUpdate()
+  // Start processing if idle
+  if (status === 'idle') void processNextBackgroundTask()
+}
+
+export const isPaused = () => paused
+
 export const clearAllQueues = () => {
+  generation++
   clearPendingTimer()
   if (currentAbort) {
     currentAbort()
@@ -494,14 +609,30 @@ export const clearAllQueues = () => {
   batchQueue = []
   status = 'idle'
   playStartTime = 0
+  isProcessing = false
+  paused = false
   notifyUpdate()
   void clearDownloadQueueStorage()
 }
 
 export const removeBatchItem = (id: string) => {
+  // If this item is currently being downloaded, cancel it
+  if (currentAbort && (status === 'downloading_batch' || status === 'downloading_pending')) {
+    const activeTask = status === 'downloading_pending'
+      ? pendingQueue.find(t => t.id === id)
+      : batchQueue.find(t => t.id === id)
+    if (activeTask && activeTask.status === 'downloading') {
+      currentAbort()
+      currentAbort = null
+      status = 'idle'
+    }
+  }
+  removePending(id)
   removeBatch(id)
   notifyUpdate()
   persistQueues()
+  // Resume processing if idle
+  if (status === 'idle') void processNextBackgroundTask()
 }
 
 export const retryAllFailed = () => {

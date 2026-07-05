@@ -55,15 +55,34 @@ export const handleDislikeMusic = async(musicInfo: LX.Music.MusicInfoOnline) => 
 }
 
 export const handleDownloadSelected = async(selectedList: LX.Music.MusicInfoOnline[]) => {
+  console.log('[DL] handleDownloadSelected: count =', selectedList.length)
   if (!selectedList.length) {
     toast(global.i18n.t('list_download_selected_empty'))
     return
   }
-  const tempId = `__download_temp_${Date.now()}`
-  await setTempList(tempId, [...selectedList])
-  const count = await downloadPlaylist(tempId)
+  // Use LIST_IDS.TEMP to match what downloadPlaylist expects
+  await setTempList(LIST_IDS.TEMP, [...selectedList])
+  const count = await downloadPlaylist(LIST_IDS.TEMP)
   if (count > 0) {
     toast(global.i18n.t('list_download_selected_tip', { count: String(count) }))
+  } else {
+    toast(global.i18n.t('list_download_selected_empty'))
+  }
+}
+
+export const handleDownloadSingle = async(musicInfo: LX.Music.MusicInfoOnline) => {
+  console.log('[DL] handleDownloadSingle:', musicInfo.name, musicInfo.id, 'source:', musicInfo.source)
+  const savePath = settingState.setting['download.savePath']
+  if (!savePath) {
+    toast('请先设置下载路径')
+    return
+  }
+
+  const { addToBatchQueue, startBatchQueue } = require('@/core/download/saveScheduler')
+  const added = await addToBatchQueue([musicInfo])
+  if (added > 0) {
+    startBatchQueue()
+    toast(global.i18n.t('list_download_selected_tip', { count: '1' }))
   } else {
     toast(global.i18n.t('list_download_selected_empty'))
   }

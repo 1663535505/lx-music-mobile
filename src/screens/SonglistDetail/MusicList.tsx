@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useCallback } from 'react'
 import OnlineList, { type OnlineListType, type OnlineListProps } from '@/components/OnlineList'
 import { clearListDetail, getListDetail, setListDetail, setListDetailInfo } from '@/core/songlist'
 import songlistState from '@/store/songlist/state'
@@ -8,13 +8,15 @@ import { useListInfo } from './state'
 
 export interface MusicListProps {
   componentId: string
+  onEnterMultiSelectMode?: () => void
 }
 
 export interface MusicListType {
   loadList: (source: LX.OnlineSource, listId: string) => void
+  enterMultiSelectMode: () => void
 }
 
-export default forwardRef<MusicListType, MusicListProps>(({ componentId }, ref) => {
+export default forwardRef<MusicListType, MusicListProps>(({ componentId, onEnterMultiSelectMode }, ref) => {
   const listRef = useRef<OnlineListType>(null)
   const headerRef = useRef<HeaderType>(null)
   const isUnmountedRef = useRef(false)
@@ -67,6 +69,9 @@ export default forwardRef<MusicListType, MusicListProps>(({ componentId }, ref) 
         })
       }
     },
+    enterMultiSelectMode() {
+      listRef.current?.enterMultiSelectMode()
+    },
   }))
 
   useEffect(() => {
@@ -109,8 +114,12 @@ export default forwardRef<MusicListType, MusicListProps>(({ componentId }, ref) 
     })
   }
 
+  const handleEnterMultiSelectMode = useCallback(() => {
+    onEnterMultiSelectMode?.()
+  }, [onEnterMultiSelectMode])
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const header = useMemo(() => <Header ref={headerRef} componentId={componentId} />, [])
+  const header = useMemo(() => <Header ref={headerRef} componentId={componentId} onEnterMultiSelectMode={handleEnterMultiSelectMode} />, [componentId, handleEnterMultiSelectMode])
 
   return <OnlineList
     ref={listRef}

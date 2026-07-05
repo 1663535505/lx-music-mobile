@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 
 import MusicList, { type MusicListType } from './MusicList'
 import PageContent from '@/components/PageContent'
@@ -59,12 +59,16 @@ export default ({ componentId, info }: { componentId: string, info: ListInfoItem
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleEnterMultiSelectMode = useCallback(() => {
+    musicListRef.current?.enterMultiSelectMode()
+  }, [])
+
 
   return (
     <PageContent>
       <StatusBar />
       <ListInfoContext.Provider value={info}>
-        <MusicList ref={musicListRef} componentId={componentId} />
+        <MusicList ref={musicListRef} componentId={componentId} onEnterMultiSelectMode={handleEnterMultiSelectMode} />
       </ListInfoContext.Provider>
       <PlayerBar />
     </PageContent>

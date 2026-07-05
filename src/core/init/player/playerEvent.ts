@@ -58,7 +58,7 @@ export default () => {
   }
 
   const handleLoadstart = () => {
-    console.log('handleLoadstart', playerState.isPlay)
+    console.log(`[PLAYER] handleLoadstart: isPlay=${playerState.isPlay} isPlayedStop=${global.lx.isPlayedStop} musicId=${playerState.musicInfo?.id}`)
     if (global.lx.isPlayedStop || !playerState.isPlay) return
     startLoadingTimeout()
     setStatusText(global.i18n.t('player__loading'))
@@ -73,6 +73,7 @@ export default () => {
   // }
 
   const handlePlaying = () => {
+    console.log(`[PLAYER] handlePlaying: musicId=${playerState.musicInfo?.id}`)
     setStatusText('')
     clearLoadingTimeout()
   }
@@ -83,14 +84,17 @@ export default () => {
   }
 
   const handleWating = () => {
+    console.log(`[PLAYER] handleWaiting: musicId=${playerState.musicInfo?.id}`)
     setStatusText(global.i18n.t('player__buffering'))
   }
 
   const handleError = () => {
+    console.log(`[PLAYER] handleError: musicId=${playerState.musicInfo?.id} retryNum=${retryNum} isPlayedStop=${global.lx.isPlayedStop}`)
     if (!playerState.musicInfo.id) return
     clearLoadingTimeout()
     if (global.lx.isPlayedStop) return
     if (playerState.playMusicInfo.musicInfo && retryNum < 2) { // 若音频URL无效则尝试刷新2次URL
+      console.log(`[PLAYER] handleError: refreshing URL, retry ${retryNum + 1}/2`)
       let musicInfo = playerState.playMusicInfo.musicInfo
       void getPosition().then((position) => {
         if (position) setNowPlayTime(position)

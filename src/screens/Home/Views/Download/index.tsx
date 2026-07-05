@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState, useMemo } from 'react'
 import { View, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
 import Text from '@/components/common/Text'
 import { useI18n } from '@/lang'
-import { getDownloadStatus, stopDownload, clearDownload, retryAllFailed, type DownloadQueueState } from '@/core/download'
+import { getDownloadStatus, stopDownload, clearDownload, retryAllFailed, pauseAllDownloads, resumeAllDownloads, isPaused, type DownloadQueueState } from '@/core/download'
 import { getDownloadRegistry, removeSongDownloaded, getDownloadRegistryStats, type DownloadRegistryItem } from '@/utils/data'
 import { createStyle } from '@/utils/tools'
 import { sizeFormate } from '@/utils/common'
@@ -23,12 +23,21 @@ export default memo(() => {
   const [state, setState] = useState<DownloadQueueState>(getDownloadStatus)
   const [downloaded, setDownloaded] = useState<Map<string, DownloadRegistryItem>>(new Map())
   const [stats, setStats] = useState<{ totalCount: number; totalSize: number }>({ totalCount: 0, totalSize: 0 })
+  const [isPausedState, setIsPausedState] = useState(false)
 
   useEffect(() => {
+    let lastUpdate = 0
     const handler = (data: DownloadQueueState) => {
+      const now = Date.now()
+      // Throttle updates to max 2 per second to reduce UI flicker
+      if (now - lastUpdate < 500) return
+      lastUpdate = now
       setState({ ...data })
+      setIsPausedState(isPaused())
     }
     global.app_event.on('downloadProgressUpdate', handler)
+    // Initial sync
+    setIsPausedState(isPaused())
     return () => {
       global.app_event.off('downloadProgressUpdate', handler)
     }
@@ -56,6 +65,15 @@ export default memo(() => {
   const handleRetryAll = useCallback(() => {
     retryAllFailed()
   }, [])
+
+  const handlePauseResume = useCallback(() => {
+    if (isPausedState) {
+      resumeAllDownloads()
+    } else {
+      pauseAllDownloads()
+    }
+    setIsPausedState(!isPausedState)
+  }, [isPausedState])
 
   const handleRemoveDownloaded = useCallback(async(musicId: string, quality: string) => {
     await removeSongDownloaded(musicId, quality)
@@ -187,17 +205,24 @@ export default memo(() => {
             <View style={styles.buttons}>
               {hasFailed && !isRunning && (
                 <TouchableOpacity style={styles.button} onPress={handleRetryAll}>
-                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>重试失败</Text>
+                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>{t('download_retry_failed')}</Text>
+                </TouchableOpacity>
+              )}
+              {allItems.length > 0 && (
+                <TouchableOpacity style={styles.button} onPress={handlePauseResume}>
+                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>
+                    {isPausedState ? t('download_resume') : t('download_pause')}
+                  </Text>
                 </TouchableOpacity>
               )}
               {isRunning && (
                 <TouchableOpacity style={styles.button} onPress={handleStop}>
-                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>停止</Text>
+                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>{t('download_stop')}</Text>
                 </TouchableOpacity>
               )}
               {allItems.length > 0 && !isRunning && (
                 <TouchableOpacity style={styles.button} onPress={handleClear}>
-                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>清空</Text>
+                  <Text style={[styles.buttonText, { color: theme['c-primary-font'] }]}>{t('download_clear')}</Text>
                 </TouchableOpacity>
               )}
             </View>

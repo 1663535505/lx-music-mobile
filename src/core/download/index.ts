@@ -14,23 +14,29 @@ import {
   getSchedulerStatus,
   removeBatchItem,
   retryAllFailed,
+  pauseAllDownloads,
+  resumeAllDownloads,
+  isPaused,
 } from './saveScheduler'
 import { buildFilePath } from './downloadTask'
 import type { SchedulerState } from './saveScheduler'
 
 export type { SchedulerState as DownloadQueueState }
 export { submitPlayRequest, getSchedulerStatus }
-
 /**
  * Check if a song exists locally (registry + filesystem).
  * Returns the local file path if found, null otherwise.
  */
 export const getLocalPath = async(musicInfo: LX.Music.MusicInfoOnline): Promise<string | null> => {
   const savePath = settingState.setting['download.savePath']
-  if (!savePath) return null
+  if (!savePath) { console.log(`[DL] getLocalPath: no savePath configured`); return null }
   const quality = getPlayQuality(settingState.setting['download.quality'] || settingState.setting['player.playQuality'] || '128k', musicInfo)
   const entry = await isSongDownloaded(musicInfo.id, quality)
-  if (entry && await existsFile(entry.filePath)) return entry.filePath
+  if (entry && await existsFile(entry.filePath)) {
+    console.log(`[DL] getLocalPath: FOUND name="${musicInfo.name}" quality=${quality} path="${entry.filePath}"`)
+    return entry.filePath
+  }
+  console.log(`[DL] getLocalPath: NOT FOUND name="${musicInfo.name}" quality=${quality} hasEntry=${!!entry}`)
   return null
 }
 
@@ -53,6 +59,7 @@ export const downloadPlaylist = async(listId: string): Promise<number> => {
 export const getDownloadStatus = (): SchedulerState => getState()
 export { stopBatchQueue as stopDownload, clearAllQueues as clearDownload }
 export { removeBatchItem as removeDownloadItem, retryAllFailed }
+export { pauseAllDownloads, resumeAllDownloads, isPaused }
 
 /**
  * Check if auto-download features are enabled and configured.

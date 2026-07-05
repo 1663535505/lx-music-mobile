@@ -151,6 +151,8 @@ const playMusic = ((fn: (musicInfo: LX.Player.PlayMusic, url: string, time: numb
 })
 
 export const setResource = (musicInfo: LX.Player.PlayMusic, url: string, duration?: number) => {
+  const name = 'progress' in musicInfo ? musicInfo.metadata.musicInfo.name : musicInfo.name
+  console.log(`[PLAYER] setResource: name="${name}" url=${url.substring(0, 80)} duration=${duration ?? 0}`)
   playMusic(musicInfo, url, duration ?? 0)
 }
 
